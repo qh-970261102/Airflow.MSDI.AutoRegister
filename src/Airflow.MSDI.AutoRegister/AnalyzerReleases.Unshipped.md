@@ -5,30 +5,30 @@
 
 Rule ID | Category | Severity | Notes
 --------|----------|----------|-------
-AMAR1001 | Airflow.MSDI.AutoRegister | Error | 工厂方法拥有类必须是普通类
-AMAR1002 | Airflow.MSDI.AutoRegister | Error | 拥有工厂方法的类不能再添加注册特性
-AMAR1003 | Airflow.MSDI.AutoRegister | Error | 工厂方法不能是 static
-AMAR1004 | Airflow.MSDI.AutoRegister | Error | 工厂方法必须 public
-AMAR1005 | Airflow.MSDI.AutoRegister | Error | 工厂方法不能是泛型方法
-AMAR1006 | Airflow.MSDI.AutoRegister | Error | 工厂方法不能返回 void
-AMAR1007 | Airflow.MSDI.AutoRegister | Error | 工厂方法返回类型必须是可解析的非泛型具名类型
-AMAR1008 | Airflow.MSDI.AutoRegister | Error | 工厂方法参数个数不合法
-AMAR1009 | Airflow.MSDI.AutoRegister | Error | 工厂方法单个参数必须是 IServiceProvider
-AMAR1010 | Airflow.MSDI.AutoRegister | Error | 单例工厂方法不允许 IServiceProvider 参数
-AMAR2001 | Airflow.MSDI.AutoRegister | Error | 注册特性作用于不支持的目标
-AMAR2002 | Airflow.MSDI.AutoRegister | Error | 服务类型必须是接口或类
-AMAR2003 | Airflow.MSDI.AutoRegister | Error | 泛型类不支持注册
-AMAR2005 | Airflow.MSDI.AutoRegister | Warning | 同一 (ServiceType, ImplType) 重复注册
-AMAR2006 | Airflow.MSDI.AutoRegister | Warning | 自身注册与接口注册生命周期不一致
-AMAR3001 | Airflow.MSDI.AutoRegister | Error | [AutoRegister] 方法必须声明为 partial
-AMAR3002 | Airflow.MSDI.AutoRegister | Error | [AutoRegister] 方法所在类必须是 partial
-AMAR3003 | Airflow.MSDI.AutoRegister | Error | [AutoRegister] 方法不能有手写实现
-AMAR3004 | Airflow.MSDI.AutoRegister | Error | [AutoRegister] 方法必须是 static
-AMAR3005 | Airflow.MSDI.AutoRegister | Error | [AutoRegister] 方法签名必须是 (IServiceCollection services)
-AMAR3006 | Airflow.MSDI.AutoRegister | Warning | 程序集内没有可注册的服务
-AMAR3007 | Airflow.MSDI.AutoRegister | Error | 同一程序集只允许一个 [AutoRegister] 方法
-AMAR4001 | Airflow.MSDI.AutoRegister | Error | 缺少 [RegistrationOptions]
-AMAR4002 | Airflow.MSDI.AutoRegister | Error | [RegistrationOptions] 索引超出构造函数参数个数
-AMAR4003 | Airflow.MSDI.AutoRegister | Error | [RegistrationOptions] 索引对应参数类型不符
-AMAR4004 | Airflow.MSDI.AutoRegister | Error | 生命周期枚举值非法
-AMAR4005 | Airflow.MSDI.AutoRegister | Warning | 继承链上存在多个 [RegistrationOptions]
+AMAR1001 | Airflow.MSDI.AutoRegister | Error | Factory method owner must be a plain class
+AMAR1002 | Airflow.MSDI.AutoRegister | Error | A class containing factory methods cannot have registration attributes
+AMAR1003 | Airflow.MSDI.AutoRegister | Error | Factory method cannot be static
+AMAR1004 | Airflow.MSDI.AutoRegister | Error | Factory method must be public
+AMAR1005 | Airflow.MSDI.AutoRegister | Error | Factory method cannot be generic
+AMAR1006 | Airflow.MSDI.AutoRegister | Error | Factory method cannot return void
+AMAR1007 | Airflow.MSDI.AutoRegister | Error | Factory method return type must be a resolvable named type
+AMAR1008 | Airflow.MSDI.AutoRegister | Error | Invalid number of factory method parameters
+AMAR1009 | Airflow.MSDI.AutoRegister | Error | Single parameter must be IServiceProvider
+AMAR1010 | Airflow.MSDI.AutoRegister | Error | Singleton factory method cannot take IServiceProvider
+AMAR2001 | Airflow.MSDI.AutoRegister | Error | Registration attribute on an unsupported target
+AMAR2002 | Airflow.MSDI.AutoRegister | Error | Service type must be an interface or class
+AMAR2003 | Airflow.MSDI.AutoRegister | Error | Generic classes cannot be registered
+AMAR2005 | Airflow.MSDI.AutoRegister | Warning | Duplicate registration of the same (ServiceType, ImplType)
+AMAR2006 | Airflow.MSDI.AutoRegister | Warning | Inconsistent lifetimes between self and interface registration
+AMAR3001 | Airflow.MSDI.AutoRegister | Error | [AutoRegister] method must be declared partial
+AMAR3002 | Airflow.MSDI.AutoRegister | Error | [AutoRegister] method's containing class must be partial
+AMAR3003 | Airflow.MSDI.AutoRegister | Error | [AutoRegister] method cannot have a manual implementation
+AMAR3004 | Airflow.MSDI.AutoRegister | Error | [AutoRegister] method must be static
+AMAR3005 | Airflow.MSDI.AutoRegister | Error | [AutoRegister] method signature must be (IServiceCollection services)
+AMAR3006 | Airflow.MSDI.AutoRegister | Warning | No registerable services found in the assembly
+AMAR3007 | Airflow.MSDI.AutoRegister | Error | Only one [AutoRegister] method is allowed per assembly
+AMAR4001 | Airflow.MSDI.AutoRegister | Error | Missing [RegistrationOptions]
+AMAR4002 | Airflow.MSDI.AutoRegister | Error | [RegistrationOptions] index exceeds constructor parameter count
+AMAR4003 | Airflow.MSDI.AutoRegister | Error | [RegistrationOptions] index points to a parameter of the wrong type
+AMAR4004 | Airflow.MSDI.AutoRegister | Error | Invalid lifetime value
+AMAR4005 | Airflow.MSDI.AutoRegister | Warning | Multiple [RegistrationOptions] on the inheritance chain

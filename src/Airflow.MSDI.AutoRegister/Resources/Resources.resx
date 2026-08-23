@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AMAR1001_Title" xml:space="preserve">
+    <value>Factory method owner must be a plain class</value>
+  </data>
+  <data name="AMAR1001_Message" xml:space="preserve">
+    <value>The owner class '{1}' of factory method '{0}' must be a plain instantiable class, not abstract/static/interface/struct or generic.</value>
+  </data>
+  <data name="AMAR1002_Title" xml:space="preserve">
+    <value>Class containing factory methods cannot have registration attributes</value>
+  </data>
+  <data name="AMAR1002_Message" xml:space="preserve">
+    <value>The class '{0}' containing factory methods is auto-registered as a singleton; remove the registration attribute(s) on the class.</value>
+  </data>
+  <data name="AMAR1003_Title" xml:space="preserve">
+    <value>Factory method cannot be static</value>
+  </data>
+  <data name="AMAR1003_Message" xml:space="preserve">
+    <value>The factory method '{0}' must be an instance method, not static.</value>
+  </data>
+  <data name="AMAR1004_Title" xml:space="preserve">
+    <value>Factory method must be public</value>
+  </data>
+  <data name="AMAR1004_Message" xml:space="preserve">
+    <value>The factory method '{0}' must be public so generated code can call it.</value>
+  </data>
+  <data name="AMAR1005_Title" xml:space="preserve">
+    <value>Factory method cannot be generic</value>
+  </data>
+  <data name="AMAR1005_Message" xml:space="preserve">
+    <value>The factory method '{0}' cannot be a generic method; generic factory methods are not supported.</value>
+  </data>
+  <data name="AMAR1006_Title" xml:space="preserve">
+    <value>Factory method cannot return void</value>
+  </data>
+  <data name="AMAR1006_Message" xml:space="preserve">
+    <value>The factory method '{0}' must not return void; its return type is the service type.</value>
+  </data>
+  <data name="AMAR1007_Title" xml:space="preserve">
+    <value>Factory method return type must be a resolvable named type</value>
+  </data>
+  <data name="AMAR1007_Message" xml:space="preserve">
+    <value>The return type of factory method '{0}' must be a resolvable named type (closed generics like List&lt;int&gt; are registered as-is); arrays, pointers, and unbound generics are not supported.</value>
+  </data>
+  <data name="AMAR1008_Title" xml:space="preserve">
+    <value>Invalid number of factory method parameters</value>
+  </data>
+  <data name="AMAR1008_Message" xml:space="preserve">
+    <value>The factory method '{0}' supports only no parameters or a single IServiceProvider parameter.</value>
+  </data>
+  <data name="AMAR1009_Title" xml:space="preserve">
+    <value>The single parameter must be IServiceProvider</value>
+  </data>
+  <data name="AMAR1009_Message" xml:space="preserve">
+    <value>The single parameter of factory method '{0}' must be System.IServiceProvider.</value>
+  </data>
+  <data name="AMAR1010_Title" xml:space="preserve">
+    <value>Singleton factory method cannot take IServiceProvider</value>
+  </data>
+  <data name="AMAR1010_Message" xml:space="preserve">
+    <value>A singleton factory method '{0}' must have no parameters; dependencies should come from the constructor injection of its owning class.</value>
+  </data>
+  <data name="AMAR2001_Title" xml:space="preserve">
+    <value>Registration attribute on an unsupported target</value>
+  </data>
+  <data name="AMAR2001_Message" xml:space="preserve">
+    <value>The registration attribute on member '{0}' is invalid; registration attributes are only valid on classes and ordinary methods.</value>
+  </data>
+  <data name="AMAR2002_Title" xml:space="preserve">
+    <value>Service type must be an interface or class</value>
+  </data>
+  <data name="AMAR2002_Message" xml:space="preserve">
+    <value>The service type '{0}' of a registration attribute must be an interface or class; closed generic types (e.g. InterfaceA&lt;int&gt;) are registered as-is, while open/unbound generics (e.g. InterfaceA&lt;&gt;), arrays, pointers, and value types are not supported.</value>
+  </data>
+  <data name="AMAR2003_Title" xml:space="preserve">
+    <value>Generic classes cannot be registered</value>
+  </data>
+  <data name="AMAR2003_Message" xml:space="preserve">
+    <value>Generic class '{0}' cannot be registered; close the generic arguments or register manually.</value>
+  </data>
+  <data name="AMAR2005_Title" xml:space="preserve">
+    <value>Duplicate registration</value>
+  </data>
+  <data name="AMAR2005_Message" xml:space="preserve">
+    <value>Duplicate registration of service '{0}' with implementation '{1}'; the last registration wins, please confirm this is intended.</value>
+  </data>
+  <data name="AMAR2006_Title" xml:space="preserve">
+    <value>Inconsistent lifetimes between self and interface registration</value>
+  </data>
+  <data name="AMAR2006_Message" xml:space="preserve">
+    <value>The lifetimes of the self-registration ({1}) and interface registration ({2}) of '{0}' are inconsistent; consider making them consistent.</value>
+  </data>
+  <data name="AMAR3001_Title" xml:space="preserve">
+    <value>[AutoRegister] method must be partial</value>
+  </data>
+  <data name="AMAR3001_Message" xml:space="preserve">
+    <value>The [AutoRegister] method '{0}' must be declared partial so the generator can provide the implementation.</value>
+  </data>
+  <data name="AMAR3002_Title" xml:space="preserve">
+    <value>The containing class must be partial</value>
+  </data>
+  <data name="AMAR3002_Message" xml:space="preserve">
+    <value>The class '{1}' containing the [AutoRegister] method '{0}' must be partial.</value>
+  </data>
+  <data name="AMAR3003_Title" xml:space="preserve">
+    <value>[AutoRegister] method cannot have a manual implementation</value>
+  </data>
+  <data name="AMAR3003_Message" xml:space="preserve">
+    <value>The [AutoRegister] method '{0}' already has an implementation; remove it and let the generator provide it.</value>
+  </data>
+  <data name="AMAR3004_Title" xml:space="preserve">
+    <value>[AutoRegister] method must be static</value>
+  </data>
+  <data name="AMAR3004_Message" xml:space="preserve">
+    <value>The [AutoRegister] method '{0}' must be static.</value>
+  </data>
+  <data name="AMAR3005_Title" xml:space="preserve">
+    <value>[AutoRegister] method signature must be (IServiceCollection services)</value>
+  </data>
+  <data name="AMAR3005_Message" xml:space="preserve">
+    <value>The [AutoRegister] method '{0}' must have the signature (IServiceCollection services).</value>
+  </data>
+  <data name="AMAR3006_Title" xml:space="preserve">
+    <value>No registerable services found in the assembly</value>
+  </data>
+  <data name="AMAR3006_Message" xml:space="preserve">
+    <value>No classes or methods with registration attributes were found in the assembly; check for typos in attribute names.</value>
+  </data>
+  <data name="AMAR3007_Title" xml:space="preserve">
+    <value>Only one [AutoRegister] method is allowed per assembly</value>
+  </data>
+  <data name="AMAR3007_Message" xml:space="preserve">
+    <value>Only one [AutoRegister] method is allowed per assembly; '{0}' already exists, remove the extra method '{1}'.</value>
+  </data>
+  <data name="AMAR4001_Title" xml:space="preserve">
+    <value>Missing [RegistrationOptions]</value>
+  </data>
+  <data name="AMAR4001_Message" xml:space="preserve">
+    <value>The BaseServiceAttribute subclass '{0}' must be decorated with [RegistrationOptions].</value>
+  </data>
+  <data name="AMAR4002_Title" xml:space="preserve">
+    <value>[RegistrationOptions] index exceeds constructor parameter count</value>
+  </data>
+  <data name="AMAR4002_Message" xml:space="preserve">
+    <value>The [RegistrationOptions] '{0}' index ({1}) exceeds the number of constructor parameters of attribute '{2}'.</value>
+  </data>
+  <data name="AMAR4003_Title" xml:space="preserve">
+    <value>[RegistrationOptions] index points to a parameter of the wrong type</value>
+  </data>
+  <data name="AMAR4003_Message" xml:space="preserve">
+    <value>The [RegistrationOptions] '{0}' index of attribute '{2}' points to a constructor parameter of the wrong type (expected {1}).</value>
+  </data>
+  <data name="AMAR4004_Title" xml:space="preserve">
+    <value>Invalid lifetime value</value>
+  </data>
+  <data name="AMAR4004_Message" xml:space="preserve">
+    <value>The lifetime value of registration attribute '{0}' is invalid; only Singleton/Scoped/Transient are supported.</value>
+  </data>
+  <data name="AMAR4005_Title" xml:space="preserve">
+    <value>Multiple [RegistrationOptions] on the inheritance chain</value>
+  </data>
+  <data name="AMAR4005_Message" xml:space="preserve">
+    <value>Multiple [RegistrationOptions] were found on the inheritance chain of '{0}'; only the nearest one is used, remove the redundant ones.</value>
+  </data>
+</root>

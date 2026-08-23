@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Globalization;
 using Microsoft.CodeAnalysis;
 
 namespace Airflow.MSDI.AutoRegister.Test;
@@ -173,16 +174,15 @@ public sealed class DiagnosticTests
     }
 
     [TestMethod]
-    public void AMAR1007_GenericReturnType_Reports()
+    public void AMAR1007_ArrayReturnType_Reports()
     {
         var (_, _, diagnostics) = GeneratorTestHelper.RunGenerator($$"""
-            using System.Collections.Generic;
             using Microsoft.Extensions.DependencyInjection;
             namespace Demo;
             public class ServiceH
             {
                 [SingletonService]
-                public List<ServiceI> GetServiceI() => new();
+                public int[] GetServiceI() => new int[0];
             }
             public class ServiceI { }
             {{RegisterSnippet}}
@@ -268,7 +268,8 @@ public sealed class DiagnosticTests
             """);
 
         AssertNotHas(diagnostics, "AMAR1010");
-        StringAssert.Contains(code, "services.AddScoped<global::Demo.ServiceJ>(sp => sp.GetRequiredService<global::Demo.ServiceH>().GetServiceJ(sp));");
+        // 工厂注册由 lambda 返回值推断服务类型(不带显式类型参数)。
+        StringAssert.Contains(code, "services.AddScoped(sp => sp.GetRequiredService<global::Demo.ServiceH>().GetServiceJ(sp));");
         StringAssert.Contains(code, "services.AddSingleton<global::Demo.ServiceH>();");
     }
 
@@ -319,6 +320,45 @@ public sealed class DiagnosticTests
             """);
 
         AssertHas(diagnostics, "AMAR2002", "int[]");
+    }
+
+    [TestMethod]
+    public void AMAR2002_UnboundGenericServiceType_Reports()
+    {
+        var (code, _, diagnostics) = GeneratorTestHelper.RunGenerator($$"""
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            public interface InterfaceA<T> { }
+            public class TypeA { }
+
+            // typeof(InterfaceA<>) 是未绑定泛型,不支持注册
+            [SingletonService(typeof(InterfaceA<>))]
+            public class TypeB : InterfaceA<TypeA> { }
+            {{RegisterSnippet}}
+            """);
+
+        AssertHas(diagnostics, "AMAR2002", "InterfaceA<>");
+        Assert.DoesNotContain( "InterfaceA", code,  "未绑定泛型服务类型应被跳过,不生成注册代码");
+    }
+
+    [TestMethod]
+    public void ClosedGenericServiceType_ReportsNoDiagnostics()
+    {
+        var (code, _, diagnostics) = GeneratorTestHelper.RunGenerator($$"""
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            public interface InterfaceA<T> { }
+            public class TypeA { }
+
+            // 闭合泛型服务类型:原样填入生成 AddSingleton<InterfaceA<TypeA>, TypeB>()
+            [SingletonService(typeof(InterfaceA<TypeA>))]
+            public class TypeB : InterfaceA<TypeA> { }
+            {{RegisterSnippet}}
+            """);
+
+        Assert.IsFalse(diagnostics.Any(d => d.Id.StartsWith("AMAR", StringComparison.Ordinal)),
+            "闭合泛型注册不应产生任何 AMAR 诊断:\n" + string.Join("\n", diagnostics.Select(d => d.ToString())));
+        StringAssert.Contains(code, "services.AddSingleton<global::Demo.InterfaceA<global::Demo.TypeA>, global::Demo.TypeB>();");
     }
 
     [TestMethod]
@@ -608,6 +648,49 @@ public sealed class DiagnosticTests
         Assert.AreEqual(DiagnosticSeverity.Warning, Find(diagnostics, "AMAR4005")!.Severity);
         // 只取最近的 [RegistrationOptions](Scoped) 生成注册。
         StringAssert.Contains(code, "services.AddScoped<global::Demo.ServiceA>();");
+    }
+
+    [TestMethod]
+    public void Diagnostics_AreLocalized_ByCurrentUICulture()
+    {
+        // 静态工厂方法触发 AMAR1003,消息应随 UI 文化切换为对应语言。
+        const string source = """
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            public class ServiceH
+            {
+                [SingletonService]
+                public static ServiceI GetServiceI() => new();
+            }
+            public class ServiceI { }
+            internal static partial class Register
+            {
+                [AutoRegister]
+                public static partial void AddServices(IServiceCollection services);
+            }
+            """;
+
+        var original = CultureInfo.CurrentUICulture;
+        try
+        {
+            // 英文 UI:消息应为英文
+            CultureInfo.CurrentUICulture = new CultureInfo("en-US");
+            var (_, _, enDiags) = GeneratorTestHelper.RunGenerator(source);
+            var enMsg = enDiags.First(d => d.Id == "AMAR1003").GetMessage();
+            StringAssert.Contains(enMsg, "must be an instance method");
+            Assert.DoesNotContain(enMsg, "不能是", "英文 UI 下不应出现中文: " + enMsg);
+
+            // 中文 UI:消息应为中文(zh-CN 回退到 zh-Hans 卫星资源)
+            CultureInfo.CurrentUICulture = new CultureInfo("zh-CN");
+            var (_, _, zhDiags) = GeneratorTestHelper.RunGenerator(source);
+            var zhMsg = zhDiags.First(d => d.Id == "AMAR1003").GetMessage();
+            StringAssert.Contains(zhMsg, "不能是 static");
+            Assert.DoesNotContain(zhMsg, "must be an instance method", "中文 UI 下不应出现英文: " + zhMsg);
+        }
+        finally
+        {
+            CultureInfo.CurrentUICulture = original;
+        }
     }
 
     // ---- 辅助 ----

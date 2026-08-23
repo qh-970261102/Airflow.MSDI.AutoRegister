@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AMAR1001_Title" xml:space="preserve">
+    <value>工厂方法拥有类必须是普通类</value>
+  </data>
+  <data name="AMAR1001_Message" xml:space="preserve">
+    <value>工厂方法 '{0}' 的拥有类 '{1}' 必须是可实例化的普通类,不能是 abstract/static/interface/struct 或泛型类。</value>
+  </data>
+  <data name="AMAR1002_Title" xml:space="preserve">
+    <value>拥有工厂方法的类不能再添加注册特性</value>
+  </data>
+  <data name="AMAR1002_Message" xml:space="preserve">
+    <value>拥有工厂方法的类 '{0}' 会被自动注册为单例,请移除类上的注册特性。</value>
+  </data>
+  <data name="AMAR1003_Title" xml:space="preserve">
+    <value>工厂方法不能是 static</value>
+  </data>
+  <data name="AMAR1003_Message" xml:space="preserve">
+    <value>工厂方法 '{0}' 不能是 static,必须是实例方法(需要通过拥有类单例解析)。</value>
+  </data>
+  <data name="AMAR1004_Title" xml:space="preserve">
+    <value>工厂方法必须 public</value>
+  </data>
+  <data name="AMAR1004_Message" xml:space="preserve">
+    <value>工厂方法 '{0}' 必须是 public(生成代码需要跨类访问)。</value>
+  </data>
+  <data name="AMAR1005_Title" xml:space="preserve">
+    <value>工厂方法不能是泛型方法</value>
+  </data>
+  <data name="AMAR1005_Message" xml:space="preserve">
+    <value>工厂方法 '{0}' 不能是泛型方法,1.x 不支持泛型工厂方法。</value>
+  </data>
+  <data name="AMAR1006_Title" xml:space="preserve">
+    <value>工厂方法不能返回 void</value>
+  </data>
+  <data name="AMAR1006_Message" xml:space="preserve">
+    <value>工厂方法 '{0}' 的返回类型不能是 void,返回值类型即服务类型。</value>
+  </data>
+  <data name="AMAR1007_Title" xml:space="preserve">
+    <value>工厂方法返回类型必须是可解析的具名类型</value>
+  </data>
+  <data name="AMAR1007_Message" xml:space="preserve">
+    <value>工厂方法 '{0}' 的返回类型必须是可解析的具名类型(闭合泛型如 List&lt;int&gt; 支持,按原样注册);不能是数组、指针或未绑定泛型。</value>
+  </data>
+  <data name="AMAR1008_Title" xml:space="preserve">
+    <value>工厂方法参数个数不合法</value>
+  </data>
+  <data name="AMAR1008_Message" xml:space="preserve">
+    <value>工厂方法 '{0}' 只支持无参或单个 IServiceProvider 参数,请删除多余参数。</value>
+  </data>
+  <data name="AMAR1009_Title" xml:space="preserve">
+    <value>工厂方法单个参数必须是 IServiceProvider</value>
+  </data>
+  <data name="AMAR1009_Message" xml:space="preserve">
+    <value>工厂方法 '{0}' 的单个参数必须是 System.IServiceProvider。</value>
+  </data>
+  <data name="AMAR1010_Title" xml:space="preserve">
+    <value>单例工厂方法不允许 IServiceProvider 参数</value>
+  </data>
+  <data name="AMAR1010_Message" xml:space="preserve">
+    <value>单例工厂方法 '{0}' 只允许无参;依赖应来自拥有类构造注入,不需要 IServiceProvider。若确实需要解析 scoped 依赖,说明生命周期用错了。</value>
+  </data>
+  <data name="AMAR2001_Title" xml:space="preserve">
+    <value>注册特性作用于不支持的目标</value>
+  </data>
+  <data name="AMAR2001_Message" xml:space="preserve">
+    <value>注册特性不能作用于成员 '{0}',只能用于类或普通方法(字段、属性、事件、构造函数、运算符等均不支持)。</value>
+  </data>
+  <data name="AMAR2002_Title" xml:space="preserve">
+    <value>服务类型必须是接口或类</value>
+  </data>
+  <data name="AMAR2002_Message" xml:space="preserve">
+    <value>注册特性的服务类型 '{0}' 必须是接口或类;支持闭合泛型(如 InterfaceA&lt;int&gt;)并原样注册,不支持开放/未绑定泛型(如 InterfaceA&lt;&gt;)、数组、指针或值类型。</value>
+  </data>
+  <data name="AMAR2003_Title" xml:space="preserve">
+    <value>泛型类不支持注册</value>
+  </data>
+  <data name="AMAR2003_Message" xml:space="preserve">
+    <value>泛型类 '{0}' 不支持注册,1.x 不支持开放泛型注册;请闭合泛型或使用手动注册。</value>
+  </data>
+  <data name="AMAR2005_Title" xml:space="preserve">
+    <value>重复注册</value>
+  </data>
+  <data name="AMAR2005_Message" xml:space="preserve">
+    <value>服务类型 '{0}' 与实现类型 '{1}' 存在重复注册,后注册者胜出,请确认是否有意。</value>
+  </data>
+  <data name="AMAR2006_Title" xml:space="preserve">
+    <value>自身注册与接口注册生命周期不一致</value>
+  </data>
+  <data name="AMAR2006_Message" xml:space="preserve">
+    <value>类 '{0}' 的自身注册(生命周期 {1})与接口注册(生命周期 {2})生命周期不一致,同实例规则下建议保持一致。</value>
+  </data>
+  <data name="AMAR3001_Title" xml:space="preserve">
+    <value>[AutoRegister] 方法必须声明为 partial</value>
+  </data>
+  <data name="AMAR3001_Message" xml:space="preserve">
+    <value>标记 [AutoRegister] 的方法 '{0}' 必须声明为 partial,生成器才能补全实现。</value>
+  </data>
+  <data name="AMAR3002_Title" xml:space="preserve">
+    <value>[AutoRegister] 方法所在类必须是 partial</value>
+  </data>
+  <data name="AMAR3002_Message" xml:space="preserve">
+    <value>标记 [AutoRegister] 的方法 '{0}' 所在类 '{1}' 必须是 partial 类。</value>
+  </data>
+  <data name="AMAR3003_Title" xml:space="preserve">
+    <value>[AutoRegister] 方法不能有手写实现</value>
+  </data>
+  <data name="AMAR3003_Message" xml:space="preserve">
+    <value>标记 [AutoRegister] 的方法 '{0}' 已有手写实现,请移除,由生成器生成。</value>
+  </data>
+  <data name="AMAR3004_Title" xml:space="preserve">
+    <value>[AutoRegister] 方法必须是 static</value>
+  </data>
+  <data name="AMAR3004_Message" xml:space="preserve">
+    <value>标记 [AutoRegister] 的方法 '{0}' 必须是 static 方法。</value>
+  </data>
+  <data name="AMAR3005_Title" xml:space="preserve">
+    <value>[AutoRegister] 方法签名必须是 (IServiceCollection services)</value>
+  </data>
+  <data name="AMAR3005_Message" xml:space="preserve">
+    <value>标记 [AutoRegister] 的方法 '{0}' 的签名必须是 (IServiceCollection services)。</value>
+  </data>
+  <data name="AMAR3006_Title" xml:space="preserve">
+    <value>程序集内没有可注册的服务</value>
+  </data>
+  <data name="AMAR3006_Message" xml:space="preserve">
+    <value>程序集内没有任何带注册特性的类或方法,请检查特性是否拼写错误。</value>
+  </data>
+  <data name="AMAR3007_Title" xml:space="preserve">
+    <value>同一程序集只允许一个 [AutoRegister] 方法</value>
+  </data>
+  <data name="AMAR3007_Message" xml:space="preserve">
+    <value>同一程序集内只允许一个 [AutoRegister] 方法,已存在 '{0}',请删除多余的方法 '{1}'。</value>
+  </data>
+  <data name="AMAR4001_Title" xml:space="preserve">
+    <value>缺少 [RegistrationOptions]</value>
+  </data>
+  <data name="AMAR4001_Message" xml:space="preserve">
+    <value>BaseServiceAttribute 的子类 '{0}' 必须使用 [RegistrationOptions] 描述其元数据。</value>
+  </data>
+  <data name="AMAR4002_Title" xml:space="preserve">
+    <value>[RegistrationOptions] 索引超出构造函数参数个数</value>
+  </data>
+  <data name="AMAR4002_Message" xml:space="preserve">
+    <value>[RegistrationOptions] 的 '{0}' 索引({1})超出特性 '{2}' 的构造函数参数个数。</value>
+  </data>
+  <data name="AMAR4003_Title" xml:space="preserve">
+    <value>[RegistrationOptions] 索引对应参数类型不符</value>
+  </data>
+  <data name="AMAR4003_Message" xml:space="preserve">
+    <value>[RegistrationOptions] 的 '{0}' 索引指向的构造函数参数类型不符(期望 {1}),请检查特性 '{2}' 的元数据。</value>
+  </data>
+  <data name="AMAR4004_Title" xml:space="preserve">
+    <value>生命周期枚举值非法</value>
+  </data>
+  <data name="AMAR4004_Message" xml:space="preserve">
+    <value>注册特性 '{0}' 的生命周期值非法,只支持 Singleton/Scoped/Transient。</value>
+  </data>
+  <data name="AMAR4005_Title" xml:space="preserve">
+    <value>继承链上存在多个 [RegistrationOptions]</value>
+  </data>
+  <data name="AMAR4005_Message" xml:space="preserve">
+    <value>特性 '{0}' 的继承链上存在多个 [RegistrationOptions],只取最近的,请移除冗余项。</value>
+  </data>
+</root>

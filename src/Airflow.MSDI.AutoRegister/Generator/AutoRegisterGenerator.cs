@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Airflow.MSDI.AutoRegister.Diagnostics;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -266,7 +267,8 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
             {
                 var attrLocation = AttrLocation(attr) ?? LocationOf(type);
 
-                // AMAR2002: 服务类型必须是非泛型的接口/类。
+                // AMAR2002: 服务类型必须是接口/类;闭合泛型(如 InterfaceA<TypeA>)原样填入,
+                // 开放/未绑定泛型(如 InterfaceA<> 或含类型参数)不支持。
                 var (rawServiceType, hasInvalidServiceType) = ReadServiceType(attr);
                 var serviceType = rawServiceType as INamedTypeSymbol;
                 if (hasInvalidServiceType)
@@ -275,8 +277,15 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
                     continue;
                 }
                 if (serviceType is not null &&
-                    (serviceType.IsGenericType ||
-                     (serviceType.TypeKind != TypeKind.Class && serviceType.TypeKind != TypeKind.Interface)))
+                    (serviceType.TypeKind != TypeKind.Class && serviceType.TypeKind != TypeKind.Interface))
+                {
+                    Report(spc, DiagnosticDescriptors.AMAR2002, attrLocation, MsgName(serviceType));
+                    continue;
+                }
+                // 未绑定泛型(如 InterfaceA<> 的 TypeArguments 为空,须显式检查)或
+                // 类型参数仍存在于实参中(开放构造泛型)都不支持。
+                if (serviceType is not null &&
+                    (serviceType.IsUnboundGenericType || ContainsTypeParameter(serviceType)))
                 {
                     Report(spc, DiagnosticDescriptors.AMAR2002, attrLocation, MsgName(serviceType));
                     continue;
@@ -457,9 +466,10 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
                 ok = false;
             }
 
-            // AMAR1007: 返回类型必须是可解析的非泛型具名类型。
+            // AMAR1007: 返回类型必须是可解析的具名类型(闭合泛型如 List<TypeA> 支持,开放/未绑定泛型不支持)。
             if (method.ReturnType is not INamedTypeSymbol returnType ||
-                returnType.IsGenericType ||
+                returnType.IsUnboundGenericType ||
+                ContainsTypeParameter(returnType) ||
                 returnType is IErrorTypeSymbol)
             {
                 Report(spc, DiagnosticDescriptors.AMAR1007, LocationOf(method), method.Name);
@@ -671,6 +681,19 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
                 or SpecialType.System_Byte or SpecialType.System_UInt32 or SpecialType.System_UInt64
                 or SpecialType.System_UInt16 or SpecialType.System_SByte;
 
+        /// <summary>
+        /// 类型(或其任意嵌套类型实参)中是否包含类型参数。
+        /// 闭合泛型如 InterfaceA&lt;TypeA&gt; 返回 false(允许原样注册);
+        /// 未绑定泛型 InterfaceA&lt;&gt; 与开放构造泛型返回 true(不支持)。
+        /// </summary>
+        private static bool ContainsTypeParameter(ITypeSymbol type) => type switch
+        {
+            ITypeParameterSymbol => true,
+            IArrayTypeSymbol array => ContainsTypeParameter(array.ElementType),
+            INamedTypeSymbol named => named.TypeArguments.Any(ContainsTypeParameter),
+            _ => false,
+        };
+
         private static RegistrationOptionsData ParseOptions(AttributeData attr)
         {
             var options = new RegistrationOptionsData();
@@ -821,10 +844,12 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
                         sb.AppendLine($"            services.AddSingleton<{Fmt(e.ImplType!)}>();");
                         break;
                     case EntryKind.FactoryMethod:
+                        // 服务类型由 lambda 返回值推断:AddLifetime(sp => ...)。
+                        // 推断结果恒等于工厂方法的声明返回类型,无需显式写出(闭合泛型也原样生效)。
                         var owner = Fmt(e.FactoryOwner!);
                         var method = e.FactoryMethod!;
                         var args = method.Parameters.Length == 0 ? "" : "sp";
-                        sb.AppendLine($"            services.{e.LifetimeMethod}<{Fmt(method.ReturnType)}>(sp => sp.GetRequiredService<{owner}>().{method.Name}({args}));");
+                        sb.AppendLine($"            services.{e.LifetimeMethod}(sp => sp.GetRequiredService<{owner}>().{method.Name}({args}));");
                         break;
                 }
             }
