@@ -1,0 +1,5 @@
+root = true
+
+[*.cs]
+# 诊断消息采用中英双语(每句中文 + 对应英文),不符合 RS1032 的"单句不带结尾句号"启发式,属刻意设计,予以抑制。
+dotnet_diagnostic.RS1032.severity = none

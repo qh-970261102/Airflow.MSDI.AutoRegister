@@ -70,7 +70,7 @@ public sealed class RuntimeIntegrationTests
 
         public RuntimeFixture()
         {
-            var (_, outputCompilation) = GeneratorTestHelper.RunGenerator(Source);
+            var (_, outputCompilation, _) = GeneratorTestHelper.RunGenerator(Source);
             _assembly = GeneratorTestHelper.LoadAssembly(outputCompilation);
 
             var registerType = GetType("Register");

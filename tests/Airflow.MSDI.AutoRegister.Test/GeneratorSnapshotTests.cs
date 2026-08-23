@@ -62,7 +62,7 @@ public sealed class GeneratorSnapshotTests
     [TestMethod]
     public void Generates_PartialMethodImplementation()
     {
-        var (code, _) = GeneratorTestHelper.RunGenerator(Source);
+        var (code, _, _) = GeneratorTestHelper.RunGenerator(Source);
 
         StringAssert.Contains(code, "public static partial void AddServicesFromCurrentAssembly(IServiceCollection services)");
         StringAssert.Contains(code, "internal static partial class Register");
@@ -72,7 +72,7 @@ public sealed class GeneratorSnapshotTests
     [TestMethod]
     public void Generates_BasicLifetimeRegistrations()
     {
-        var (code, _) = GeneratorTestHelper.RunGenerator(Source);
+        var (code, _, _) = GeneratorTestHelper.RunGenerator(Source);
 
         StringAssert.Contains(code, "services.AddSingleton<global::Demo.ServiceA>();");
         StringAssert.Contains(code, "services.AddScoped<global::Demo.ServiceB>();");
@@ -82,7 +82,7 @@ public sealed class GeneratorSnapshotTests
     [TestMethod]
     public void Generates_InterfaceDirectRegistration_WhenNoSelfRegistration()
     {
-        var (code, _) = GeneratorTestHelper.RunGenerator(Source);
+        var (code, _, _) = GeneratorTestHelper.RunGenerator(Source);
 
         // ServiceD 只有接口注册 → AddSingleton<InterfaceD, ServiceD>()
         StringAssert.Contains(code, "services.AddSingleton<global::Demo.InterfaceD, global::Demo.ServiceD>();");
@@ -91,7 +91,7 @@ public sealed class GeneratorSnapshotTests
     [TestMethod]
     public void Generates_InterfaceViaSelf_WhenSelfRegistrationExists()
     {
-        var (code, _) = GeneratorTestHelper.RunGenerator(Source);
+        var (code, _, _) = GeneratorTestHelper.RunGenerator(Source);
 
         // ServiceE 有自身注册 → 接口注册指向同一单例
         StringAssert.Contains(code, "services.AddSingleton<global::Demo.ServiceE>();");
@@ -101,7 +101,7 @@ public sealed class GeneratorSnapshotTests
     [TestMethod]
     public void Orders_ByOrder_ThenByTypeName()
     {
-        var (code, _) = GeneratorTestHelper.RunGenerator(Source);
+        var (code, _, _) = GeneratorTestHelper.RunGenerator(Source);
 
         // ServiceG order=1 先于 ServiceF order=2
         var gIndex = code.IndexOf("global::Demo.InterfaceF, global::Demo.ServiceG>();", StringComparison.Ordinal);
@@ -112,7 +112,7 @@ public sealed class GeneratorSnapshotTests
     [TestMethod]
     public void Generates_FactoryMethodRegistrations_WithOwnerSingletonOnce()
     {
-        var (code, _) = GeneratorTestHelper.RunGenerator(Source);
+        var (code, _, _) = GeneratorTestHelper.RunGenerator(Source);
 
         // 拥有类只注册一次单例
         var ownerCount = CountOccurrences(code, "services.AddSingleton<global::Demo.ServiceH>();");
@@ -125,7 +125,7 @@ public sealed class GeneratorSnapshotTests
     [TestMethod]
     public void NoAutoRegisterMethod_GeneratesNothing()
     {
-        var (code, _) = GeneratorTestHelper.RunGenerator("""
+        var (code, _, _) = GeneratorTestHelper.RunGenerator("""
             namespace Demo;
             [SingletonService]
             public class ServiceA { }
@@ -135,9 +135,9 @@ public sealed class GeneratorSnapshotTests
     }
 
     [TestMethod]
-    public void MultipleAutoRegisterMethods_EachGeneratesOwnImplementation()
+    public void MultipleAutoRegisterMethods_Reports3007_AndGeneratesForFirstOnly()
     {
-        var (code, _) = GeneratorTestHelper.RunGenerator("""
+        var (code, _, diagnostics) = GeneratorTestHelper.RunGenerator("""
             using Microsoft.Extensions.DependencyInjection;
             namespace Demo;
             [SingletonService]
@@ -152,16 +152,20 @@ public sealed class GeneratorSnapshotTests
             }
             """);
 
+        // 同一程序集只允许一个 [AutoRegister] 方法:第二个方法报 AMAR3007。
+        Assert.IsTrue(diagnostics.Any(d => d.Id == "AMAR3007"), "多余的 [AutoRegister] 方法应报告 AMAR3007");
+
+        // 只为首个方法生成实现,注册体只出现一次。
         StringAssert.Contains(code, "AddOne(IServiceCollection services)");
-        StringAssert.Contains(code, "AddTwo(IServiceCollection services)");
+        Assert.DoesNotContain( "AddTwo(IServiceCollection services)", code,  "不应为多余的 [AutoRegister] 方法生成实现");
         var count = CountOccurrences(code, "services.AddSingleton<global::Demo.ServiceA>();");
-        Assert.AreEqual(2, count, "每个 [AutoRegister] 方法都应包含完整注册体");
+        Assert.AreEqual(1, count, "注册体应只生成一份");
     }
 
     [TestMethod]
     public void CustomAttribute_WithRegistrationOptions_IsSupported()
     {
-        var (code, _) = GeneratorTestHelper.RunGenerator("""
+        var (code, _, _) = GeneratorTestHelper.RunGenerator("""
             using System;
             using Microsoft.Extensions.DependencyInjection;
             namespace Demo;
