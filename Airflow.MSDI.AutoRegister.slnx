@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/simple/">
+    <Project Path="simple/Airflow.MSDI.AutoRegister.Demo/Airflow.MSDI.AutoRegister.Demo.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Airflow.MSDI.AutoRegister/Airflow.MSDI.AutoRegister.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Airflow.MSDI.AutoRegister.Test/Airflow.MSDI.AutoRegister.Test.csproj" />
+  </Folder>
+</Solution>
