@@ -99,6 +99,41 @@ public sealed class GeneratorSnapshotTests
     }
 
     [TestMethod]
+    public void Generates_ClosedGenericInterfaceRegistration_AsIs()
+    {
+        var (code, _, _) = GeneratorTestHelper.RunGenerator("""
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            public interface InterfaceA<T> { }
+            public class TypeA { }
+
+            // 闭合泛型服务类型:原样填入生成 AddSingleton<InterfaceA<TypeA>, TypeB>()
+            [SingletonService(typeof(InterfaceA<TypeA>))]
+            public class TypeB : InterfaceA<TypeA> { }
+
+            // 自身注册 + 闭合泛型接口注册:接口指向同一单例
+            [SingletonService]
+            [SingletonService(typeof(InterfaceA<TypeA>))]
+            public class TypeC : InterfaceA<TypeA> { }
+
+            // "包一层"模式:具体类继承泛型类并闭合类型参数,注册闭合泛型接口
+            public class GenericService<T> : InterfaceA<T> { }
+            [ScopedService(typeof(InterfaceA<TypeA>))]
+            public class TypeD : GenericService<TypeA> { }
+
+            internal static partial class Register
+            {
+                [AutoRegister]
+                public static partial void AddServices(IServiceCollection services);
+            }
+            """);
+
+        StringAssert.Contains(code, "services.AddSingleton<global::Demo.InterfaceA<global::Demo.TypeA>, global::Demo.TypeB>();");
+        StringAssert.Contains(code, "services.AddSingleton<global::Demo.InterfaceA<global::Demo.TypeA>>(sp => sp.GetRequiredService<global::Demo.TypeC>());");
+        StringAssert.Contains(code, "services.AddScoped<global::Demo.InterfaceA<global::Demo.TypeA>, global::Demo.TypeD>();");
+    }
+
+    [TestMethod]
     public void Orders_ByOrder_ThenByTypeName()
     {
         var (code, _, _) = GeneratorTestHelper.RunGenerator(Source);
@@ -118,8 +153,33 @@ public sealed class GeneratorSnapshotTests
         var ownerCount = CountOccurrences(code, "services.AddSingleton<global::Demo.ServiceH>();");
         Assert.AreEqual(1, ownerCount, "ServiceH 应只注册一次单例");
 
-        StringAssert.Contains(code, "services.AddSingleton<global::Demo.ServiceI>(sp => sp.GetRequiredService<global::Demo.ServiceH>().GetServiceI());");
-        StringAssert.Contains(code, "services.AddScoped<global::Demo.ServiceJ>(sp => sp.GetRequiredService<global::Demo.ServiceH>().GetServiceJ(sp));");
+        StringAssert.Contains(code, "services.AddSingleton(sp => sp.GetRequiredService<global::Demo.ServiceH>().GetServiceI());");
+        StringAssert.Contains(code, "services.AddScoped(sp => sp.GetRequiredService<global::Demo.ServiceH>().GetServiceJ(sp));");
+    }
+
+    [TestMethod]
+    public void Generates_ClosedGenericFactoryReturnType_WithLambdaInference()
+    {
+        var (code, _, _) = GeneratorTestHelper.RunGenerator("""
+            using System.Collections.Generic;
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            public class TypeA { }
+            public class ServiceH
+            {
+                [SingletonService]
+                public List<TypeA> GetList() => new();
+            }
+            internal static partial class Register
+            {
+                [AutoRegister]
+                public static partial void AddServices(IServiceCollection services);
+            }
+            """);
+
+        // 闭合泛型返回类型放行,服务类型由 lambda 返回值推断,不重复写类型参数
+        StringAssert.Contains(code, "services.AddSingleton(sp => sp.GetRequiredService<global::Demo.ServiceH>().GetList());");
+        StringAssert.Contains(code, "services.AddSingleton<global::Demo.ServiceH>();");
     }
 
     [TestMethod]

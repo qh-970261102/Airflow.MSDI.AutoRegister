@@ -18,7 +18,7 @@ Manually registering dozens of services is tedious and error-prone. Reflection-b
 - ✅ Fast IDE experience with full type safety
 - ✅ Works against the **MSDI 1.0 API surface** (`Microsoft.Extensions.DependencyInjection.Abstractions` 1.0.0)
 
-## Features (v1.0)
+## Features
 
 - `[SingletonService]`, `[ScopedService]`, `[TransientService]` — the three built-in registration attributes
 - Register a class by itself, by interface, or both — **one attribute = one registration**
@@ -116,6 +116,36 @@ services.AddSingleton<ServiceI>(sp => sp.GetRequiredService<ServiceH>().GetServi
 services.AddScoped<ServiceJ>(sp => sp.GetRequiredService<ServiceH>().GetServiceJ(sp));
 ```
 
+### 5. Viewing the generated code
+
+By default the generated code is **not written to disk** — it only exists in memory during compilation. If you want to see the generated file, you have two options:
+
+**Option A — view it in the IDE (nothing written to disk):**
+
+In Solution Explorer, expand **Dependencies → Analyzers → Airflow.MSDI.AutoRegister.AutoRegisterGenerator** and double-click `AutoRegister.Register.AddServicesFromCurrentAssembly.g.cs`.
+
+**Option B — persist it to disk, refreshed to the latest on every build:**
+
+Add the following to your `.csproj`:
+
+```xml
+<PropertyGroup>
+  <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+  <CompilerGeneratedFilesOutputPath>$(MSBuildProjectDirectory)/Generated</CompilerGeneratedFilesOutputPath>
+</PropertyGroup>
+
+<ItemGroup>
+  <!-- Reference-only output; must NOT be compiled again (the generator already injects it in memory) -->
+  <Compile Remove="Generated/**/*.cs" />
+  <None Include="Generated/**/*.cs" Visible="false" />
+</ItemGroup>
+```
+
+- Whenever the generator runs (i.e. on every real compilation), the `.g.cs` under `Generated/` is **rewritten in full**, so its content always matches the current build.
+- The file is a **read-only reference** — editing it doesn't affect compilation.
+- Keep the `<Compile Remove>` line: without it the on-disk file would be compiled again alongside the in-memory copy, causing duplicate-definition errors.
+- Configure this in whichever project wants the output; the generator project itself needs nothing.
+
 ## How It Works
 
 ### Class registration
@@ -128,6 +158,15 @@ services.AddScoped<ServiceJ>(sp => sp.GetRequiredService<ServiceH>().GetServiceJ
 
 The last row is the **same-instance rule**: when a class registers itself *and* an interface, the interface resolution points back to the class registration, so `I` and `C` resolve to the exact same instance. The same pattern applies to `Scoped` and `Transient` — inside a scope, `I` and `C` are the same scoped instance.
 
+**Closed generic service types are supported as-is:**
+
+| Attribute usage | Generated code |
+|---|---|
+| `[SingletonService(typeof(I<TA>))]` on `C : I<TA>` | `services.AddSingleton<I<TA>, C>();` |
+| `[SingletonService]` + `[SingletonService(typeof(I<TA>))]` on `C : I<TA>` | `services.AddSingleton<C>();` + `services.AddSingleton<I<TA>>(sp => sp.GetRequiredService<C>());` |
+
+The type arguments are filled in verbatim. Open/unbound generics (`typeof(I<>)`) and open-constructed generics are rejected with an error. A **generic class itself cannot be registered** (e.g. `class G<T> : I<T>` — an error is reported); close the type parameters first by deriving a concrete class: `class StringG : G<string>` and register `StringG` — "just wrap it one more layer".
+
 ### Order
 
 Registrations are sorted by `(Order, implementation type name)`:
@@ -139,16 +178,18 @@ Registrations are sorted by `(Order, implementation type name)`:
 
 - The owning class is automatically registered as a **singleton** (once per class).
 - The method must be a `public` instance method on a plain class, with **no parameters or exactly one `IServiceProvider` parameter**.
-- Return type becomes the service type:
+- Return type becomes the service type. The generated registration **omits the explicit type argument** — the service type is inferred from the factory's return type (lambda natural-type inference), so **closed generics are registered as-is** (`List<TypeA>` works, no repetition). Open/unbound generics and arrays are rejected:
 
 ```csharp
 // parameterless
-services.AddSingleton<ServiceI>(sp => sp.GetRequiredService<ServiceH>().GetServiceI());
+services.AddSingleton(sp => sp.GetRequiredService<ServiceH>().GetServiceI());
 // with IServiceProvider
-services.AddScoped<ServiceJ>(sp => sp.GetRequiredService<ServiceH>().GetServiceJ(sp));
+services.AddScoped(sp => sp.GetRequiredService<ServiceH>().GetServiceJ(sp));
+// closed generic return type, inferred the same way
+services.AddSingleton(sp => sp.GetRequiredService<ServiceH>().GetList()); // service type = List<TypeA>
 ```
 
-> Invalid shapes (static method, non-public, wrong parameters, non-plain owner class, etc.) are **silently skipped in v1.0**. Since **v1.1** the generator reports `AMAR`-prefixed diagnostics (errors block compilation, warnings hint) — see [.tesk/1.1-impl.md](.tesk/1.1-impl.md).
+> Invalid shapes (static method, non-public, wrong parameters, non-plain owner class, etc.) are **silently skipped in v1.0**. Since **v1.1** the generator reports `AMAR`-prefixed diagnostics (errors block compilation, warnings hint).
 
 ### Custom attributes
 
@@ -173,15 +214,44 @@ public class ServiceX : InterfaceX { }
 // → services.AddTransient<InterfaceX, ServiceX>();
 ```
 
+## Diagnostics
+
+Since **v1.1** the generator reports `AMAR`-prefixed diagnostics for invalid usage — **errors block compilation**, **warnings are hints**. Messages are **localized**: English by default, simplified Chinese via satellite resources; the language follows the IDE/compiler UI language.
+
+| Rule ID | Severity | Description |
+|---|---|---|
+| AMAR1001 | Error | Factory method owner must be a plain class |
+| AMAR1002 | Error | A class containing factory methods cannot have registration attributes |
+| AMAR1003 | Error | Factory method cannot be static |
+| AMAR1004 | Error | Factory method must be public |
+| AMAR1005 | Error | Factory method cannot be generic |
+| AMAR1006 | Error | Factory method cannot return void |
+| AMAR1007 | Error | Factory method return type must be a resolvable named type |
+| AMAR1008 | Error | Invalid number of factory method parameters |
+| AMAR1009 | Error | Single parameter must be IServiceProvider |
+| AMAR1010 | Error | Singleton factory method cannot take IServiceProvider |
+| AMAR2001 | Error | Registration attribute on an unsupported target |
+| AMAR2002 | Error | Service type must be an interface or class |
+| AMAR2003 | Error | Generic classes cannot be registered |
+| AMAR2005 | Warning | Duplicate registration of the same (ServiceType, ImplType) |
+| AMAR2006 | Warning | Inconsistent lifetimes between self and interface registration |
+| AMAR3001 | Error | [AutoRegister] method must be declared partial |
+| AMAR3002 | Error | [AutoRegister] method's containing class must be partial |
+| AMAR3003 | Error | [AutoRegister] method cannot have a manual implementation |
+| AMAR3004 | Error | [AutoRegister] method must be static |
+| AMAR3005 | Error | [AutoRegister] method signature must be (IServiceCollection services) |
+| AMAR3006 | Warning | No registerable services found in the assembly |
+| AMAR3007 | Error | Only one [AutoRegister] method is allowed per assembly |
+| AMAR4001 | Error | Missing [RegistrationOptions] |
+| AMAR4002 | Error | [RegistrationOptions] index exceeds constructor parameter count |
+| AMAR4003 | Error | [RegistrationOptions] index points to a parameter of the wrong type |
+| AMAR4004 | Error | Invalid lifetime value |
+| AMAR4005 | Warning | Multiple [RegistrationOptions] on the inheritance chain |
+
 ## Compatibility
 
 - The package depends only on **`Microsoft.Extensions.DependencyInjection.Abstractions` 1.0.0**, the oldest MSDI API surface, so the generated code compiles against any modern MSDI container.
 - The generator targets `netstandard2.0` and runs on the .NET SDK's Roslyn (C# 9+ partial methods with accessibility are required for `[AutoRegister]`).
-
-## Roadmap
-
-- **v1.1**: `AMAR1001`–`AMAR4005` diagnostics for invalid shapes (factory method constraints, plain-class requirement, unsupported types, `[AutoRegister]` shape, `[RegistrationOptions]` metadata); one `[AutoRegister]` method per assembly. See [.tesk/1.1-impl.md](.tesk/1.1-impl.md) for the detailed error-detection plan.
-- **v1.2 (candidate)**: incremental generator optimizations (hintName stability), open-generic registration evaluation.
 
 ## License
 
