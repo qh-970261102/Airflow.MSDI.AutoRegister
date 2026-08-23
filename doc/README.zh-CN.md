@@ -214,6 +214,40 @@ public class ServiceX : InterfaceX { }
 // → services.AddTransient<InterfaceX, ServiceX>();
 ```
 
+## 错误诊断
+
+自 **v1.1** 起,生成器会对非法用法报告 `AMAR` 前缀的诊断——**Error 阻断编译,Warning 仅提示**。消息**支持本地化**:默认英文,简体中文通过卫星资源提供,语言跟随 IDE/编译器的界面语言。
+
+| Rule ID | Severity | 说明 |
+|---|---|---|
+| AMAR1001 | Error | 工厂方法拥有类必须是普通类 |
+| AMAR1002 | Error | 拥有工厂方法的类不能再添加注册特性 |
+| AMAR1003 | Error | 工厂方法不能是 static |
+| AMAR1004 | Error | 工厂方法必须 public |
+| AMAR1005 | Error | 工厂方法不能是泛型方法 |
+| AMAR1006 | Error | 工厂方法不能返回 void |
+| AMAR1007 | Error | 工厂方法返回类型必须是可解析的具名类型 |
+| AMAR1008 | Error | 工厂方法参数个数不合法 |
+| AMAR1009 | Error | 工厂方法单个参数必须是 IServiceProvider |
+| AMAR1010 | Error | 单例工厂方法不允许 IServiceProvider 参数 |
+| AMAR2001 | Error | 注册特性作用于不支持的目标 |
+| AMAR2002 | Error | 服务类型必须是接口或类 |
+| AMAR2003 | Error | 泛型类不支持注册 |
+| AMAR2005 | Warning | 同一 (ServiceType, ImplType) 重复注册 |
+| AMAR2006 | Warning | 自身注册与接口注册生命周期不一致 |
+| AMAR3001 | Error | [AutoRegister] 方法必须声明为 partial |
+| AMAR3002 | Error | [AutoRegister] 方法所在类必须是 partial |
+| AMAR3003 | Error | [AutoRegister] 方法不能有手写实现 |
+| AMAR3004 | Error | [AutoRegister] 方法必须是 static |
+| AMAR3005 | Error | [AutoRegister] 方法签名必须是 (IServiceCollection services) |
+| AMAR3006 | Warning | 程序集内没有可注册的服务 |
+| AMAR3007 | Error | 同一程序集只允许一个 [AutoRegister] 方法 |
+| AMAR4001 | Error | 缺少 [RegistrationOptions] |
+| AMAR4002 | Error | [RegistrationOptions] 索引超出构造函数参数个数 |
+| AMAR4003 | Error | [RegistrationOptions] 索引对应参数类型不符 |
+| AMAR4004 | Error | 生命周期枚举值非法 |
+| AMAR4005 | Warning | 继承链上存在多个 [RegistrationOptions] |
+
 ## 兼容性
 
 - 包仅依赖 **`Microsoft.Extensions.DependencyInjection.Abstractions` 1.0.0**(最古老的 MSDI API 面),因此生成的代码可配合任意现代 MSDI 容器编译运行。

@@ -214,6 +214,40 @@ public class ServiceX : InterfaceX { }
 // → services.AddTransient<InterfaceX, ServiceX>();
 ```
 
+## Diagnostics
+
+Since **v1.1** the generator reports `AMAR`-prefixed diagnostics for invalid usage — **errors block compilation**, **warnings are hints**. Messages are **localized**: English by default, simplified Chinese via satellite resources; the language follows the IDE/compiler UI language.
+
+| Rule ID | Severity | Description |
+|---|---|---|
+| AMAR1001 | Error | Factory method owner must be a plain class |
+| AMAR1002 | Error | A class containing factory methods cannot have registration attributes |
+| AMAR1003 | Error | Factory method cannot be static |
+| AMAR1004 | Error | Factory method must be public |
+| AMAR1005 | Error | Factory method cannot be generic |
+| AMAR1006 | Error | Factory method cannot return void |
+| AMAR1007 | Error | Factory method return type must be a resolvable named type |
+| AMAR1008 | Error | Invalid number of factory method parameters |
+| AMAR1009 | Error | Single parameter must be IServiceProvider |
+| AMAR1010 | Error | Singleton factory method cannot take IServiceProvider |
+| AMAR2001 | Error | Registration attribute on an unsupported target |
+| AMAR2002 | Error | Service type must be an interface or class |
+| AMAR2003 | Error | Generic classes cannot be registered |
+| AMAR2005 | Warning | Duplicate registration of the same (ServiceType, ImplType) |
+| AMAR2006 | Warning | Inconsistent lifetimes between self and interface registration |
+| AMAR3001 | Error | [AutoRegister] method must be declared partial |
+| AMAR3002 | Error | [AutoRegister] method's containing class must be partial |
+| AMAR3003 | Error | [AutoRegister] method cannot have a manual implementation |
+| AMAR3004 | Error | [AutoRegister] method must be static |
+| AMAR3005 | Error | [AutoRegister] method signature must be (IServiceCollection services) |
+| AMAR3006 | Warning | No registerable services found in the assembly |
+| AMAR3007 | Error | Only one [AutoRegister] method is allowed per assembly |
+| AMAR4001 | Error | Missing [RegistrationOptions] |
+| AMAR4002 | Error | [RegistrationOptions] index exceeds constructor parameter count |
+| AMAR4003 | Error | [RegistrationOptions] index points to a parameter of the wrong type |
+| AMAR4004 | Error | Invalid lifetime value |
+| AMAR4005 | Warning | Multiple [RegistrationOptions] on the inheritance chain |
+
 ## Compatibility
 
 - The package depends only on **`Microsoft.Extensions.DependencyInjection.Abstractions` 1.0.0**, the oldest MSDI API surface, so the generated code compiles against any modern MSDI container.
