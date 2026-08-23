@@ -18,7 +18,7 @@
 - ✅ IDE 体验好,完全类型安全
 - ✅ 只依赖 **MSDI 1.0 API 面**(`Microsoft.Extensions.DependencyInjection.Abstractions` 1.0.0)
 
-## 特性(v1.0)
+## 特性
 
 - `[SingletonService]`、`[ScopedService]`、`[TransientService]` —— 三个内置注册特性
 - 支持按类自身注册、按接口注册、或两者同时注册——**一个特性 = 一条注册**
@@ -116,6 +116,36 @@ services.AddSingleton<ServiceI>(sp => sp.GetRequiredService<ServiceH>().GetServi
 services.AddScoped<ServiceJ>(sp => sp.GetRequiredService<ServiceH>().GetServiceJ(sp));
 ```
 
+### 5. 查看生成的代码
+
+默认情况下,生成代码**并不落盘**,只存在于编译内存中。如果你想看到生成之后的文件,有两条路:
+
+**方式一:在 IDE 里直接看(无需落盘)**
+
+在解决方案资源管理器中展开 **依赖(Dependencies) → 分析器(Analyzers) → Airflow.MSDI.AutoRegister.AutoRegisterGenerator**,双击 `AutoRegister.Register.AddServicesFromCurrentAssembly.g.cs` 即可查看。
+
+**方式二:持久落盘,每次编译自动刷新为最新**
+
+在项目的 `.csproj` 里加上:
+
+```xml
+<PropertyGroup>
+  <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+  <CompilerGeneratedFilesOutputPath>$(MSBuildProjectDirectory)/Generated</CompilerGeneratedFilesOutputPath>
+</PropertyGroup>
+
+<ItemGroup>
+  <!-- 仅供查看/参考,不参与编译(生成器已内存注入,再编译会重复定义) -->
+  <Compile Remove="Generated/**/*.cs" />
+  <None Include="Generated/**/*.cs" Visible="false" />
+</ItemGroup>
+```
+
+- 只要生成器运行(即发生真正编译),`Generated/` 下的 `.g.cs` 就会被**整份重写**,内容始终与本次编译一致。
+- 该文件是**只读参考产物**,直接改它不影响编译结果。
+- `<Compile Remove>` 这一行不能删:否则落盘文件会与内存注入的那份被重复编译,报"重复定义"错误。
+- 哪个项目想看就在哪个项目里配;生成器项目本身无需任何配置。
+
 ## 工作原理
 
 ### 类注册
@@ -128,6 +158,15 @@ services.AddScoped<ServiceJ>(sp => sp.GetRequiredService<ServiceH>().GetServiceJ
 
 最后一行是**同实例规则**:当类既注册自身又注册接口时,接口解析指向类的注册,因此 `I` 与 `C` 解析到完全相同的实例。`Scoped` 与 `Transient` 同理——在同一个 scope 内,`I` 与 `C` 是同一个 scoped 实例。
 
+**闭合泛型服务类型按原样注册:**
+
+| 特性用法 | 生成的代码 |
+|---|---|
+| `C : I<TA>` 上 `[SingletonService(typeof(I<TA>))]` | `services.AddSingleton<I<TA>, C>();` |
+| `C : I<TA>` 上 `[SingletonService]` + `[SingletonService(typeof(I<TA>))]` | `services.AddSingleton<C>();` + `services.AddSingleton<I<TA>>(sp => sp.GetRequiredService<C>());` |
+
+类型实参原样填入。开放/未绑定泛型(`typeof(I<>)`)与开放构造泛型会报错拦截。**泛型类本身不能注册**(如 `class G<T> : I<T>` 会报错);先用具体类闭合类型参数:`class StringG : G<string>`,再注册 `StringG` 即可——"多包一层"而已。
+
 ### Order 排序
 
 注册按 `(Order, 实现类型名)` 排序:
@@ -139,16 +178,18 @@ services.AddScoped<ServiceJ>(sp => sp.GetRequiredService<ServiceH>().GetServiceJ
 
 - 拥有类自动注册为**单例**(每个类只注册一次)。
 - 方法必须是普通类上的 `public` 实例方法,参数为**无参或仅一个 `IServiceProvider`**。
-- 方法返回值类型即服务类型:
+- 方法返回值类型即服务类型。生成的注册**不带显式类型参数**——服务类型由工厂 lambda 的返回值自动推断(lambda 自然类型推断),因此**闭合泛型按原样注册**(`List<TypeA>` 直接可用,无需重复写类型);开放/未绑定泛型与数组会被报错拦截:
 
 ```csharp
 // 无参
-services.AddSingleton<ServiceI>(sp => sp.GetRequiredService<ServiceH>().GetServiceI());
+services.AddSingleton(sp => sp.GetRequiredService<ServiceH>().GetServiceI());
 // 带 IServiceProvider
-services.AddScoped<ServiceJ>(sp => sp.GetRequiredService<ServiceH>().GetServiceJ(sp));
+services.AddScoped(sp => sp.GetRequiredService<ServiceH>().GetServiceJ(sp));
+// 闭合泛型返回类型,同样自动推断
+services.AddSingleton(sp => sp.GetRequiredService<ServiceH>().GetList()); // 服务类型 = List<TypeA>
 ```
 
-> 非法形态(static 方法、非 public、参数不合规、拥有类非普通类等)在 **v1.0 会被静默跳过**。诊断能力规划在 **v1.1** —— 详见 [.tesk/1.1-impl.md](.tesk/1.1-impl.md)。
+> 非法形态(static 方法、非 public、参数不合规、拥有类非普通类等)在 **v1.0 会被静默跳过**;诊断能力自 **v1.1** 起由生成器报告(`AMAR` 前缀:Error 阻断编译、Warning 仅提示)。
 
 ### 自定义特性
 
@@ -177,11 +218,6 @@ public class ServiceX : InterfaceX { }
 
 - 包仅依赖 **`Microsoft.Extensions.DependencyInjection.Abstractions` 1.0.0**(最古老的 MSDI API 面),因此生成的代码可配合任意现代 MSDI 容器编译运行。
 - 生成器目标 `netstandard2.0`,运行于 .NET SDK 内置 Roslyn(`[AutoRegister]` 需要 C# 9+ 的带可访问性 partial 方法)。
-
-## 路线图
-
-- **v1.1**:非法形态诊断(工厂方法约束、普通类要求、不支持的类型)、增量生成器优化。
-- 错误检测的详细规划见 [.tesk/1.1-impl.md](.tesk/1.1-impl.md)。
 
 ## License
 

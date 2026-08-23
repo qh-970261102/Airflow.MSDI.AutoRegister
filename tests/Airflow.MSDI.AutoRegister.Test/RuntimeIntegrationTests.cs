@@ -10,6 +10,7 @@ public sealed class RuntimeIntegrationTests
 {
     private const string Source = """
         using System;
+        using System.Collections.Generic;
         using Microsoft.Extensions.DependencyInjection;
 
         namespace RuntimeDemo;
@@ -36,12 +37,26 @@ public sealed class RuntimeIntegrationTests
         [SingletonService(typeof(InterfaceF), 1)]
         public class ServiceG : InterfaceF { }
 
+        public interface InterfaceG<T> { }
+        public class TypeG1 { }
+
+        // 闭合泛型服务类型:原样生成 AddSingleton<InterfaceG<TypeG1>, ServiceK>()
+        [SingletonService(typeof(InterfaceG<TypeG1>))]
+        public class ServiceK : InterfaceG<TypeG1> { }
+
         public class ServiceH
         {
             [SingletonService]
             public ServiceI GetServiceI() => new();
             [ScopedService]
             public ServiceJ GetServiceJ(IServiceProvider sp) => new();
+        }
+
+        public class ServiceL
+        {
+            // 闭合泛型返回类型:生成 AddSingleton(sp => ...GetTypeG1List()),服务类型 List<TypeG1> 由 lambda 推断
+            [SingletonService]
+            public List<TypeG1> GetTypeG1List() => new();
         }
 
         public interface InterfaceD { }
@@ -84,6 +99,8 @@ public sealed class RuntimeIntegrationTests
         public Type GetType(string name) => _assembly.GetType($"RuntimeDemo.{name}", throwOnError: true)!;
 
         public object Resolve(string typeName) => _provider.GetRequiredService(GetType(typeName));
+
+        public object Resolve(Type serviceType) => _provider.GetRequiredService(serviceType);
 
         public object ResolveFromScope(IServiceScope scope, string typeName) =>
             scope.ServiceProvider.GetRequiredService(GetType(typeName));
@@ -174,6 +191,26 @@ public sealed class RuntimeIntegrationTests
 
         Assert.AreSame(j1, j2);
         Assert.AreNotSame(j1, j3);
+    }
+
+    [TestMethod]
+    public void ClosedGenericInterface_ResolvesToImplementation()
+    {
+        using var fixture = new RuntimeFixture();
+        // InterfaceG<TypeG1> 由 ServiceK 实现,构造闭合泛型类型后解析
+        var serviceType = fixture.GetType("InterfaceG`1").MakeGenericType(fixture.GetType("TypeG1"));
+        var k = fixture.Resolve(serviceType);
+        Assert.AreEqual("RuntimeDemo.ServiceK", k.GetType().FullName);
+    }
+
+    [TestMethod]
+    public void ClosedGenericFactoryReturnType_Resolves()
+    {
+        using var fixture = new RuntimeFixture();
+        // 工厂返回 List<TypeG1>,推断式注册后真实容器应能解析出该闭合泛型
+        var listType = typeof(List<>).MakeGenericType(fixture.GetType("TypeG1"));
+        var list = fixture.Resolve(listType);
+        Assert.IsInstanceOfType(list, listType);
     }
 
     [TestMethod]

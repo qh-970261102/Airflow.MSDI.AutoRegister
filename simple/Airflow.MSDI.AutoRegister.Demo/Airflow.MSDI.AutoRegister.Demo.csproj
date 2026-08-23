@@ -6,6 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
+
+    <!-- 源生成器输出落盘:每次编译(生成器运行)都会全量重写 Generated/ 下的 .g.cs -->
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(MSBuildProjectDirectory)/Generated</CompilerGeneratedFilesOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,6 +17,12 @@
     <ProjectReference Include="..\..\src\Airflow.MSDI.AutoRegister\Airflow.MSDI.AutoRegister.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 落盘的生成文件仅供查看/参考,不参与编译(生成器已内存注入;再编译会重复定义) -->
+    <Compile Remove="Generated/**/*.cs" />
+    <None Include="Generated/**/*.cs" Visible="false" />
   </ItemGroup>
 
   <ItemGroup>

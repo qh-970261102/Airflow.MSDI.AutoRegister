@@ -57,5 +57,13 @@ using (var scope2 = provider.CreateScope())
     Console.WriteLine($"ServiceJ  工厂方法(Scoped,带 IServiceProvider): 同 Scope 同一实例 {ReferenceEquals(j1, j2)}, 跨 Scope 不同实例 {!ReferenceEquals(j1, j3)}");
 }
 
+// --- 闭合泛型服务类型注册:原样填入生成 AddSingleton<IGenericService<string>, StringService>() ---
+var g = provider.GetRequiredService<IGenericService<string>>();
+Console.WriteLine($"IGenericService<string> 由具体类闭合泛型后提供: {g is StringService}");
+
+// --- 闭合泛型工厂方法:AddSingleton(sp => ...) 的服务类型由 lambda 返回值推断为 List<string> ---
+var list = provider.GetRequiredService<List<string>>();
+Console.WriteLine($"List<string> 由工厂方法注册并解析成功: {list != null}");
+
 Console.WriteLine();
 Console.WriteLine("Demo 完成 ✅");
