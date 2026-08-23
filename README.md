@@ -148,7 +148,7 @@ services.AddSingleton<ServiceI>(sp => sp.GetRequiredService<ServiceH>().GetServi
 services.AddScoped<ServiceJ>(sp => sp.GetRequiredService<ServiceH>().GetServiceJ(sp));
 ```
 
-> Invalid shapes (static method, non-public, wrong parameters, non-plain owner class, etc.) are **silently skipped in v1.0**. Diagnostics are planned for **v1.1** — see [.tesk/1.1-impl.md](.tesk/1.1-impl.md).
+> Invalid shapes (static method, non-public, wrong parameters, non-plain owner class, etc.) are **silently skipped in v1.0**. Since **v1.1** the generator reports `AMAR`-prefixed diagnostics (errors block compilation, warnings hint) — see [.tesk/1.1-impl.md](.tesk/1.1-impl.md).
 
 ### Custom attributes
 
@@ -180,8 +180,8 @@ public class ServiceX : InterfaceX { }
 
 ## Roadmap
 
-- **v1.1**: diagnostics for invalid shapes (factory method constraints, plain-class requirement, unsupported types), incremental generator optimizations.
-- See [.tesk/1.1-impl.md](.tesk/1.1-impl.md) for the detailed error-detection plan.
+- **v1.1**: `AMAR1001`–`AMAR4005` diagnostics for invalid shapes (factory method constraints, plain-class requirement, unsupported types, `[AutoRegister]` shape, `[RegistrationOptions]` metadata); one `[AutoRegister]` method per assembly. See [.tesk/1.1-impl.md](.tesk/1.1-impl.md) for the detailed error-detection plan.
+- **v1.2 (candidate)**: incremental generator optimizations (hintName stability), open-generic registration evaluation.
 
 ## License
 

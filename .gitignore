@@ -58,3 +58,4 @@ nunit-*.xml
 
 # Local NuGet package cache (sandbox workaround)
 .nuget/
+.task/*
