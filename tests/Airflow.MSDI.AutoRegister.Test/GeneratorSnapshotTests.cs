@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Airflow.MSDI.AutoRegister.Test;
 
 /// <summary>验证生成代码的结构(不运行容器)。</summary>
@@ -70,32 +72,62 @@ public sealed class GeneratorSnapshotTests
     }
 
     [TestMethod]
+    public void Generates_AnchorAndAlias_EvenForSingleRegistration()
+    {
+        var (code, _, _) = GeneratorTestHelper.RunGenerator("""
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            [SingletonService]
+            public class ServiceA { }
+            internal static partial class Register
+            {
+                [AutoRegister]
+                public static partial void AddServices(IServiceCollection services);
+            }
+            """);
+
+        // 单条注册也统一走 object 锚点:锚点 + 别名
+        Assert.AreEqual("__key1", AnchorKey(code, "global::Demo.ServiceA"));
+        StringAssert.Contains(code, "services.AddKeyedSingleton<global::Demo.ServiceA>(__key1);");
+        StringAssert.Contains(code, "services.AddSingleton<global::Demo.ServiceA>(sp => sp.GetRequiredKeyedService<global::Demo.ServiceA>(__key1));");
+    }
+
+    [TestMethod]
     public void Generates_BasicLifetimeRegistrations()
     {
         var (code, _, _) = GeneratorTestHelper.RunGenerator(Source);
 
-        StringAssert.Contains(code, "services.AddSingleton<global::Demo.ServiceA>();");
-        StringAssert.Contains(code, "services.AddScoped<global::Demo.ServiceB>();");
-        StringAssert.Contains(code, "services.AddTransient<global::Demo.ServiceC>();");
+        foreach (var (impl, keyedMethod, plainMethod) in new[]
+                 {
+                     ("ServiceA", "AddKeyedSingleton", "AddSingleton"),
+                     ("ServiceB", "AddKeyedScoped", "AddScoped"),
+                     ("ServiceC", "AddKeyedTransient", "AddTransient"),
+                 })
+        {
+            var display = "global::Demo." + impl;
+            var anchor = AnchorKey(code, display);
+            StringAssert.Contains(code, $"services.{keyedMethod}<{display}>({anchor});");
+            StringAssert.Contains(code, $"services.{plainMethod}<{display}>(sp => sp.GetRequiredKeyedService<{display}>({anchor}));");
+        }
     }
 
     [TestMethod]
-    public void Generates_InterfaceDirectRegistration_WhenNoSelfRegistration()
+    public void Generates_InterfaceRegistration_PointingAtAnchor()
     {
         var (code, _, _) = GeneratorTestHelper.RunGenerator(Source);
 
-        // ServiceD 只有接口注册 → AddSingleton<InterfaceD, ServiceD>()
-        StringAssert.Contains(code, "services.AddSingleton<global::Demo.InterfaceD, global::Demo.ServiceD>();");
+        var anchor = AnchorKey(code, "global::Demo.ServiceD");
+        StringAssert.Contains(code, $"services.AddSingleton<global::Demo.InterfaceD>(sp => sp.GetRequiredKeyedService<global::Demo.ServiceD>({anchor}));");
     }
 
     [TestMethod]
-    public void Generates_InterfaceViaSelf_WhenSelfRegistrationExists()
+    public void Generates_SelfAndInterface_SharingAnchor()
     {
         var (code, _, _) = GeneratorTestHelper.RunGenerator(Source);
 
-        // ServiceE 有自身注册 → 接口注册指向同一单例
-        StringAssert.Contains(code, "services.AddSingleton<global::Demo.ServiceE>();");
-        StringAssert.Contains(code, "services.AddSingleton<global::Demo.InterfaceE>(sp => sp.GetRequiredService<global::Demo.ServiceE>());");
+        var anchor = AnchorKey(code, "global::Demo.ServiceE");
+        StringAssert.Contains(code, $"services.AddSingleton<global::Demo.ServiceE>(sp => sp.GetRequiredKeyedService<global::Demo.ServiceE>({anchor}));");
+        StringAssert.Contains(code, $"services.AddSingleton<global::Demo.InterfaceE>(sp => sp.GetRequiredKeyedService<global::Demo.ServiceE>({anchor}));");
     }
 
     [TestMethod]
@@ -107,16 +139,13 @@ public sealed class GeneratorSnapshotTests
             public interface InterfaceA<T> { }
             public class TypeA { }
 
-            // 闭合泛型服务类型:原样填入生成 AddSingleton<InterfaceA<TypeA>, TypeB>()
             [SingletonService(typeof(InterfaceA<TypeA>))]
             public class TypeB : InterfaceA<TypeA> { }
 
-            // 自身注册 + 闭合泛型接口注册:接口指向同一单例
             [SingletonService]
             [SingletonService(typeof(InterfaceA<TypeA>))]
             public class TypeC : InterfaceA<TypeA> { }
 
-            // "包一层"模式:具体类继承泛型类并闭合类型参数,注册闭合泛型接口
             public class GenericService<T> : InterfaceA<T> { }
             [ScopedService(typeof(InterfaceA<TypeA>))]
             public class TypeD : GenericService<TypeA> { }
@@ -128,9 +157,16 @@ public sealed class GeneratorSnapshotTests
             }
             """);
 
-        StringAssert.Contains(code, "services.AddSingleton<global::Demo.InterfaceA<global::Demo.TypeA>, global::Demo.TypeB>();");
-        StringAssert.Contains(code, "services.AddSingleton<global::Demo.InterfaceA<global::Demo.TypeA>>(sp => sp.GetRequiredService<global::Demo.TypeC>());");
-        StringAssert.Contains(code, "services.AddScoped<global::Demo.InterfaceA<global::Demo.TypeA>, global::Demo.TypeD>();");
+        var anchorB = AnchorKey(code, "global::Demo.TypeB");
+        var anchorC = AnchorKey(code, "global::Demo.TypeC");
+        var anchorD = AnchorKey(code, "global::Demo.TypeD");
+
+        StringAssert.Contains(code, $"sp.GetRequiredKeyedService<global::Demo.TypeB>({anchorB})");
+        StringAssert.Contains(code, $"sp.GetRequiredKeyedService<global::Demo.TypeC>({anchorC})");
+        StringAssert.Contains(code, $"sp.GetRequiredKeyedService<global::Demo.TypeD>({anchorD})");
+
+        StringAssert.Contains(code, "services.AddSingleton<global::Demo.InterfaceA<global::Demo.TypeA>>(sp => ");
+        StringAssert.Contains(code, "services.AddScoped<global::Demo.InterfaceA<global::Demo.TypeA>>(sp => ");
     }
 
     [TestMethod]
@@ -139,9 +175,14 @@ public sealed class GeneratorSnapshotTests
         var (code, _, _) = GeneratorTestHelper.RunGenerator(Source);
 
         // ServiceG order=1 先于 ServiceF order=2
-        var gIndex = code.IndexOf("global::Demo.InterfaceF, global::Demo.ServiceG>();", StringComparison.Ordinal);
-        var fIndex = code.IndexOf("global::Demo.InterfaceF, global::Demo.ServiceF>();", StringComparison.Ordinal);
+        var gIndex = code.IndexOf("global::Demo.InterfaceF>(sp => sp.GetRequiredKeyedService<global::Demo.ServiceG>", StringComparison.Ordinal);
+        var fIndex = code.IndexOf("global::Demo.InterfaceF>(sp => sp.GetRequiredKeyedService<global::Demo.ServiceF>", StringComparison.Ordinal);
         Assert.IsTrue(gIndex >= 0 && fIndex > gIndex, "ServiceG(order=1) 应在 ServiceF(order=2) 之前注册");
+
+        // 元数据同样按 Order 排序
+        var gMeta = code.IndexOf("typeof(global::Demo.ServiceG)", StringComparison.Ordinal);
+        var fMeta = code.IndexOf("typeof(global::Demo.ServiceF)", StringComparison.Ordinal);
+        Assert.IsTrue(gMeta >= 0 && fMeta > gMeta, "元数据中 ServiceG(order=1) 应在 ServiceF(order=2) 之前");
     }
 
     [TestMethod]
@@ -149,16 +190,19 @@ public sealed class GeneratorSnapshotTests
     {
         var (code, _, _) = GeneratorTestHelper.RunGenerator(Source);
 
-        // 拥有类只注册一次单例
-        var ownerCount = CountOccurrences(code, "services.AddSingleton<global::Demo.ServiceH>();");
-        Assert.AreEqual(1, ownerCount, "ServiceH 应只注册一次单例");
+        // 拥有类只注册一次(非 keyed 直接注册)
+        Assert.AreEqual(1, CountOccurrences(code, "services.AddSingleton<global::Demo.ServiceH>();"), "ServiceH 应只注册一次单例");
 
-        StringAssert.Contains(code, "services.AddSingleton(sp => sp.GetRequiredService<global::Demo.ServiceH>().GetServiceI());");
-        StringAssert.Contains(code, "services.AddScoped(sp => sp.GetRequiredService<global::Demo.ServiceH>().GetServiceJ(sp));");
+        var anchorI = AnchorKey(code, "global::Demo.ServiceI");
+        var anchorJ = AnchorKey(code, "global::Demo.ServiceJ");
+        StringAssert.Contains(code, $"services.AddKeyedSingleton<global::Demo.ServiceI>({anchorI}, (sp, _) => sp.GetRequiredService<global::Demo.ServiceH>().GetServiceI());");
+        StringAssert.Contains(code, $"services.AddKeyedScoped<global::Demo.ServiceJ>({anchorJ}, (sp, _) => sp.GetRequiredService<global::Demo.ServiceH>().GetServiceJ(sp));");
+        StringAssert.Contains(code, $"services.AddSingleton<global::Demo.ServiceI>(sp => sp.GetRequiredKeyedService<global::Demo.ServiceI>({anchorI}));");
+        StringAssert.Contains(code, $"services.AddScoped<global::Demo.ServiceJ>(sp => sp.GetRequiredKeyedService<global::Demo.ServiceJ>({anchorJ}));");
     }
 
     [TestMethod]
-    public void Generates_ClosedGenericFactoryReturnType_WithLambdaInference()
+    public void Generates_ClosedGenericFactoryReturnType_AsAnchorAndAlias()
     {
         var (code, _, _) = GeneratorTestHelper.RunGenerator("""
             using System.Collections.Generic;
@@ -177,8 +221,10 @@ public sealed class GeneratorSnapshotTests
             }
             """);
 
-        // 闭合泛型返回类型放行,服务类型由 lambda 返回值推断,不重复写类型参数
-        StringAssert.Contains(code, "services.AddSingleton(sp => sp.GetRequiredService<global::Demo.ServiceH>().GetList());");
+        var listType = "global::System.Collections.Generic.List<global::Demo.TypeA>";
+        var anchor = AnchorKey(code, listType);
+        StringAssert.Contains(code, "sp.GetRequiredService<global::Demo.ServiceH>().GetList()");
+        StringAssert.Contains(code, $"sp.GetRequiredKeyedService<{listType}>({anchor})");
         StringAssert.Contains(code, "services.AddSingleton<global::Demo.ServiceH>();");
     }
 
@@ -212,14 +258,11 @@ public sealed class GeneratorSnapshotTests
             }
             """);
 
-        // 同一程序集只允许一个 [AutoRegister] 方法:第二个方法报 AMAR3007。
         Assert.IsTrue(diagnostics.Any(d => d.Id == "AMAR3007"), "多余的 [AutoRegister] 方法应报告 AMAR3007");
 
-        // 只为首个方法生成实现,注册体只出现一次。
         StringAssert.Contains(code, "AddOne(IServiceCollection services)");
-        Assert.DoesNotContain( "AddTwo(IServiceCollection services)", code,  "不应为多余的 [AutoRegister] 方法生成实现");
-        var count = CountOccurrences(code, "services.AddSingleton<global::Demo.ServiceA>();");
-        Assert.AreEqual(1, count, "注册体应只生成一份");
+        Assert.DoesNotContain("AddTwo(IServiceCollection services)", code, "不应为多余的 [AutoRegister] 方法生成实现");
+        Assert.AreEqual(1, CountOccurrences(code, "services.AddKeyedSingleton<global::Demo.ServiceA>(__key1);"), "注册体应只生成一份");
     }
 
     [TestMethod]
@@ -255,7 +298,192 @@ public sealed class GeneratorSnapshotTests
             }
             """);
 
-        StringAssert.Contains(code, "services.AddTransient<global::Demo.InterfaceX, global::Demo.ServiceX>();");
+        var anchor = AnchorKey(code, "global::Demo.ServiceX");
+        StringAssert.Contains(code, $"services.AddKeyedTransient<global::Demo.ServiceX>({anchor});");
+        StringAssert.Contains(code, $"services.AddTransient<global::Demo.InterfaceX>(sp => sp.GetRequiredKeyedService<global::Demo.ServiceX>({anchor}));");
+    }
+
+    // ---- 2.0: keyed / 锚点 ----
+
+    [TestMethod]
+    public void Generates_KeyedSelfRegistration()
+    {
+        var (code, _, _) = GeneratorTestHelper.RunGenerator("""
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            [SingletonService(Key = "primary")]
+            public class ServiceA { }
+            internal static partial class Register
+            {
+                [AutoRegister]
+                public static partial void AddServices(IServiceCollection services);
+            }
+            """);
+
+        StringAssert.Contains(code, "services.AddKeyedSingleton<global::Demo.ServiceA>(__key1);");
+        StringAssert.Contains(code, "services.AddKeyedSingleton<global::Demo.ServiceA>(\"primary\", (sp, _) => sp.GetRequiredKeyedService<global::Demo.ServiceA>(__key1));");
+    }
+
+    [TestMethod]
+    public void Generates_KeyedInterfaceViaSelf_WithAnchor()
+    {
+        var (code, _, _) = GeneratorTestHelper.RunGenerator("""
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            public interface InterfaceA { }
+            [SingletonService(Key = "primary")]
+            [SingletonService(typeof(InterfaceA), Key = "primary")]
+            public class ServiceA : InterfaceA { }
+            internal static partial class Register
+            {
+                [AutoRegister]
+                public static partial void AddServices(IServiceCollection services);
+            }
+            """);
+
+        StringAssert.Contains(code, "object __key1 = new object();");
+        StringAssert.Contains(code, "services.AddKeyedSingleton<global::Demo.ServiceA>(__key1);");
+        StringAssert.Contains(code, "services.AddKeyedSingleton<global::Demo.ServiceA>(\"primary\", (sp, _) => sp.GetRequiredKeyedService<global::Demo.ServiceA>(__key1));");
+        StringAssert.Contains(code, "services.AddKeyedSingleton<global::Demo.InterfaceA>(\"primary\", (sp, _) => sp.GetRequiredKeyedService<global::Demo.ServiceA>(__key1));");
+    }
+
+    [TestMethod]
+    public void Generates_AnchorSharedByMultipleInterfaces()
+    {
+        var (code, _, _) = GeneratorTestHelper.RunGenerator("""
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            public interface InterfaceA { }
+            public interface InterfaceB { }
+            [SingletonService(typeof(InterfaceA))]
+            [SingletonService(typeof(InterfaceB))]
+            public class ServiceA : InterfaceA, InterfaceB { }
+            internal static partial class Register
+            {
+                [AutoRegister]
+                public static partial void AddServices(IServiceCollection services);
+            }
+            """);
+
+        var anchor = AnchorKey(code, "global::Demo.ServiceA");
+        Assert.AreEqual(1, CountOccurrences(code, $"services.AddKeyedSingleton<global::Demo.ServiceA>({anchor});"), "同一实现只应生成一个锚点");
+        StringAssert.Contains(code, $"services.AddSingleton<global::Demo.InterfaceA>(sp => sp.GetRequiredKeyedService<global::Demo.ServiceA>({anchor}));");
+        StringAssert.Contains(code, $"services.AddSingleton<global::Demo.InterfaceB>(sp => sp.GetRequiredKeyedService<global::Demo.ServiceA>({anchor}));");
+    }
+
+    [TestMethod]
+    public void Generates_CrossKeyRegistration_SharingSameAnchor()
+    {
+        var (code, _, _) = GeneratorTestHelper.RunGenerator("""
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            public interface InterfaceA { }
+            [SingletonService(typeof(InterfaceA), Key = "k1")]
+            [SingletonService(typeof(InterfaceA), Key = "k2")]
+            public class ServiceA : InterfaceA { }
+            internal static partial class Register
+            {
+                [AutoRegister]
+                public static partial void AddServices(IServiceCollection services);
+            }
+            """);
+
+        var anchor = AnchorKey(code, "global::Demo.ServiceA");
+        StringAssert.Contains(code, $"services.AddKeyedSingleton<global::Demo.InterfaceA>(\"k1\", (sp, _) => sp.GetRequiredKeyedService<global::Demo.ServiceA>({anchor}));");
+        StringAssert.Contains(code, $"services.AddKeyedSingleton<global::Demo.InterfaceA>(\"k2\", (sp, _) => sp.GetRequiredKeyedService<global::Demo.ServiceA>({anchor}));");
+    }
+
+    // ---- 2.0: 泛型 targettype ----
+
+    [TestMethod]
+    public void Generates_GenericAttribute_AsServiceType()
+    {
+        var (code, _, _) = GeneratorTestHelper.RunGenerator("""
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            public interface InterfaceA { }
+            [SingletonService<InterfaceA>(Key = "k", Order = 1)]
+            public class ServiceA : InterfaceA { }
+            internal static partial class Register
+            {
+                [AutoRegister]
+                public static partial void AddServices(IServiceCollection services);
+            }
+            """);
+
+        StringAssert.Contains(code, "services.AddKeyedSingleton<global::Demo.InterfaceA>(\"k\", (sp, _) => sp.GetRequiredKeyedService<global::Demo.ServiceA>(__key1));");
+        StringAssert.Contains(code, "new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Demo.InterfaceA>(\"k\", typeof(global::Demo.ServiceA), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton, 1),");
+    }
+
+    [TestMethod]
+    public void Generates_GenericFactoryTarget_AsBaseType()
+    {
+        var (code, _, _) = GeneratorTestHelper.RunGenerator("""
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            public interface InterfaceA { }
+            public class ServiceB : InterfaceA { }
+            public class Factory
+            {
+                [SingletonService<InterfaceA>(Key = "k")]
+                public ServiceB Create() => new();
+            }
+            internal static partial class Register
+            {
+                [AutoRegister]
+                public static partial void AddServices(IServiceCollection services);
+            }
+            """);
+
+        // 锚点是"返回类型 + 内部 key + 工厂 lambda",别名把 InterfaceA 指回锚点
+        StringAssert.Contains(code, "services.AddKeyedSingleton<global::Demo.ServiceB>(__key1, (sp, _) => sp.GetRequiredService<global::Demo.Factory>().Create());");
+        StringAssert.Contains(code, "services.AddKeyedSingleton<global::Demo.InterfaceA>(\"k\", (sp, _) => sp.GetRequiredKeyedService<global::Demo.ServiceB>(__key1));");
+    }
+
+    // ---- 2.0: 元数据与集合 ----
+
+    [TestMethod]
+    public void Generates_MetadataAndCollection_ForEveryServiceType()
+    {
+        var (code, _, _) = GeneratorTestHelper.RunGenerator("""
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            [SingletonService]
+            public class ServiceA { }
+            internal static partial class Register
+            {
+                [AutoRegister]
+                public static partial void AddServices(IServiceCollection services);
+            }
+            """);
+
+        StringAssert.Contains(code, "services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Demo.ServiceA>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Demo.ServiceA>[]");
+        StringAssert.Contains(code, "new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Demo.ServiceA>(null, typeof(global::Demo.ServiceA), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton, 0),");
+        StringAssert.Contains(code, "services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Demo.ServiceA>>(sp => new global::Demo.ServiceA[]");
+        StringAssert.Contains(code, "sp.GetRequiredKeyedService<global::Demo.ServiceA>(__key1),");
+    }
+
+    [TestMethod]
+    public void Generates_CollectionEntries_ViaAnchors_ForUnkeyedMultiImplementation()
+    {
+        var (code, _, _) = GeneratorTestHelper.RunGenerator(Source);
+
+        var anchorF = AnchorKey(code, "global::Demo.ServiceF");
+        var anchorG = AnchorKey(code, "global::Demo.ServiceG");
+        StringAssert.Contains(code, "services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Demo.InterfaceF>>(sp => new global::Demo.InterfaceF[]");
+        StringAssert.Contains(code, $"sp.GetRequiredKeyedService<global::Demo.ServiceG>({anchorG}),");
+        StringAssert.Contains(code, $"sp.GetRequiredKeyedService<global::Demo.ServiceF>({anchorF}),");
+    }
+
+    // ---- 辅助 ----
+
+    /// <summary>取某实现的锚点变量名(如 __key1)。</summary>
+    private static string AnchorKey(string code, string implementationDisplay)
+    {
+        var pattern = @"AddKeyed\w+<" + Regex.Escape(implementationDisplay) + @">\((__key\d+)";
+        var match = Regex.Match(code, pattern);
+        Assert.IsTrue(match.Success, $"未找到 {implementationDisplay} 的锚点。生成代码:\n{code}");
+        return match.Groups[1].Value;
     }
 
     private static int CountOccurrences(string haystack, string needle)

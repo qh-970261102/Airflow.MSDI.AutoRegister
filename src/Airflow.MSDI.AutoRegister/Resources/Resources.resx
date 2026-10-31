@@ -52,7 +52,7 @@
     <value>Factory method return type must be a resolvable named type</value>
   </data>
   <data name="AMAR1007_Message" xml:space="preserve">
-    <value>The return type of factory method '{0}' must be a resolvable named type (closed generics like List&lt;int&gt; are registered as-is); arrays, pointers, and unbound generics are not supported.</value>
+    <value>The return type of factory method '{0}' must be a reference type (a class or interface); closed generics like List&lt;int&gt; are registered as-is, while value types, arrays, pointers, and unbound generics are not supported.</value>
   </data>
   <data name="AMAR1008_Title" xml:space="preserve">
     <value>Invalid number of factory method parameters</value>
@@ -94,13 +94,7 @@
     <value>Duplicate registration</value>
   </data>
   <data name="AMAR2005_Message" xml:space="preserve">
-    <value>Duplicate registration of service '{0}' with implementation '{1}'; the last registration wins, please confirm this is intended.</value>
-  </data>
-  <data name="AMAR2006_Title" xml:space="preserve">
-    <value>Inconsistent lifetimes between self and interface registration</value>
-  </data>
-  <data name="AMAR2006_Message" xml:space="preserve">
-    <value>The lifetimes of the self-registration ({1}) and interface registration ({2}) of '{0}' are inconsistent; consider making them consistent.</value>
+    <value>Duplicate registration of service '{0}' with implementation '{1}' (key: {2}); the last registration wins, please confirm this is intended.</value>
   </data>
   <data name="AMAR3001_Title" xml:space="preserve">
     <value>[AutoRegister] method must be partial</value>
@@ -173,5 +167,35 @@
   </data>
   <data name="AMAR4005_Message" xml:space="preserve">
     <value>Multiple [RegistrationOptions] were found on the inheritance chain of '{0}'; only the nearest one is used, remove the redundant ones.</value>
+  </data>
+  <data name="AMAR2007_Title" xml:space="preserve">
+    <value>Implementation type is not compatible with the service type</value>
+  </data>
+  <data name="AMAR2007_Message" xml:space="preserve">
+    <value>Implementation type '{0}' cannot be converted to service type '{1}'; check the generic target or the typeof(...) argument.</value>
+  </data>
+  <data name="AMAR2008_Title" xml:space="preserve">
+    <value>Implementation type cannot be instantiated</value>
+  </data>
+  <data name="AMAR2008_Message" xml:space="preserve">
+    <value>Implementation type '{0}' is abstract or static and cannot be instantiated; remove the registration attribute or use a concrete type.</value>
+  </data>
+  <data name="AMAR2009_Title" xml:space="preserve">
+    <value>Duplicate service key for the same target type</value>
+  </data>
+  <data name="AMAR2009_Message" xml:space="preserve">
+    <value>Service type '{0}' already has a registration with key {1} (implementation '{2}'); keys must be unique per target type.</value>
+  </data>
+  <data name="AMAR4006_Title" xml:space="preserve">
+    <value>Generic registration attribute has too many type parameters</value>
+  </data>
+  <data name="AMAR4006_Message" xml:space="preserve">
+    <value>Generic registration attribute '{0}' has {1} type parameters; only one type parameter (the target type) is supported.</value>
+  </data>
+  <data name="AMAR4007_Title" xml:space="preserve">
+    <value>Conflicting service types in the registration attribute</value>
+  </data>
+  <data name="AMAR4007_Message" xml:space="preserve">
+    <value>The generic target type '{0}' conflicts with the constructor service type '{1}' on '{2}'; specify the service type in only one place.</value>
   </data>
 </root>

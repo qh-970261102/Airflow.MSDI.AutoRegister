@@ -8,20 +8,298 @@ namespace Airflow.MSDI.AutoRegister.Demo
     {
         public static partial void AddServicesFromCurrentAssembly(IServiceCollection services)
         {
-            services.AddSingleton(sp => sp.GetRequiredService<global::Airflow.MSDI.AutoRegister.Demo.GenericListFactory>().GetStringList());
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.ICache(Singleton) / 工厂方法
+            object __key1 = new object();
+            services.AddKeyedSingleton<global::Airflow.MSDI.AutoRegister.Demo.ICache>(__key1, (sp, _) => sp.GetRequiredService<global::Airflow.MSDI.AutoRegister.Demo.CacheFactory>().CreateRedis());
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.ICache(Scoped) / 工厂方法
+            object __key2 = new object();
+            services.AddKeyedScoped<global::Airflow.MSDI.AutoRegister.Demo.ICache>(__key2, (sp, _) => sp.GetRequiredService<global::Airflow.MSDI.AutoRegister.Demo.CacheFactory>().CreateMemory(sp));
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.MainView(Transient)
+            object __key3 = new object();
+            services.AddKeyedTransient<global::Airflow.MSDI.AutoRegister.Demo.MainView>(__key3);
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.MainViewModel(Transient)
+            object __key4 = new object();
+            services.AddKeyedTransient<global::Airflow.MSDI.AutoRegister.Demo.MainViewModel>(__key4);
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.ReadOnlyConnector(Singleton)
+            object __key5 = new object();
+            services.AddKeyedSingleton<global::Airflow.MSDI.AutoRegister.Demo.ReadOnlyConnector>(__key5);
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.ServiceA(Singleton)
+            object __key6 = new object();
+            services.AddKeyedSingleton<global::Airflow.MSDI.AutoRegister.Demo.ServiceA>(__key6);
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.ServiceB(Scoped)
+            object __key7 = new object();
+            services.AddKeyedScoped<global::Airflow.MSDI.AutoRegister.Demo.ServiceB>(__key7);
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.ServiceC(Transient)
+            object __key8 = new object();
+            services.AddKeyedTransient<global::Airflow.MSDI.AutoRegister.Demo.ServiceC>(__key8);
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.ServiceD(Singleton)
+            object __key9 = new object();
+            services.AddKeyedSingleton<global::Airflow.MSDI.AutoRegister.Demo.ServiceD>(__key9);
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.ServiceE(Singleton)
+            object __key10 = new object();
+            services.AddKeyedSingleton<global::Airflow.MSDI.AutoRegister.Demo.ServiceE>(__key10);
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.ServiceF(Singleton)
+            object __key11 = new object();
+            services.AddKeyedSingleton<global::Airflow.MSDI.AutoRegister.Demo.ServiceF>(__key11);
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.ServiceG(Singleton)
+            object __key12 = new object();
+            services.AddKeyedSingleton<global::Airflow.MSDI.AutoRegister.Demo.ServiceG>(__key12);
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.ServiceI(Singleton) / 工厂方法
+            object __key13 = new object();
+            services.AddKeyedSingleton<global::Airflow.MSDI.AutoRegister.Demo.ServiceI>(__key13, (sp, _) => sp.GetRequiredService<global::Airflow.MSDI.AutoRegister.Demo.ServiceH>().GetServiceI());
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.ServiceJ(Scoped) / 工厂方法
+            object __key14 = new object();
+            services.AddKeyedScoped<global::Airflow.MSDI.AutoRegister.Demo.ServiceJ>(__key14, (sp, _) => sp.GetRequiredService<global::Airflow.MSDI.AutoRegister.Demo.ServiceH>().GetServiceJ(sp));
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.ServiceM(Singleton)
+            object __key15 = new object();
+            services.AddKeyedSingleton<global::Airflow.MSDI.AutoRegister.Demo.ServiceM>(__key15);
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.SettingsView(Transient)
+            object __key16 = new object();
+            services.AddKeyedTransient<global::Airflow.MSDI.AutoRegister.Demo.SettingsView>(__key16);
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.SettingsViewModel(Transient)
+            object __key17 = new object();
+            services.AddKeyedTransient<global::Airflow.MSDI.AutoRegister.Demo.SettingsViewModel>(__key17);
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.SpecialView(Transient)
+            object __key18 = new object();
+            services.AddKeyedTransient<global::Airflow.MSDI.AutoRegister.Demo.SpecialView>(__key18);
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.SqlConnector(Singleton)
+            object __key19 = new object();
+            services.AddKeyedSingleton<global::Airflow.MSDI.AutoRegister.Demo.SqlConnector>(__key19);
+            // 锚点:global::Airflow.MSDI.AutoRegister.Demo.StringService(Singleton)
+            object __key20 = new object();
+            services.AddKeyedSingleton<global::Airflow.MSDI.AutoRegister.Demo.StringService>(__key20);
+            // 锚点:global::System.Collections.Generic.List<string>(Singleton) / 工厂方法
+            object __key21 = new object();
+            services.AddKeyedSingleton<global::System.Collections.Generic.List<string>>(__key21, (sp, _) => sp.GetRequiredService<global::Airflow.MSDI.AutoRegister.Demo.GenericListFactory>().GetStringList());
+
+            services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.CacheFactory>();
             services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.GenericListFactory>();
-            services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.ServiceA>();
-            services.AddScoped<global::Airflow.MSDI.AutoRegister.Demo.ServiceB>();
-            services.AddTransient<global::Airflow.MSDI.AutoRegister.Demo.ServiceC>();
-            services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.InterfaceD, global::Airflow.MSDI.AutoRegister.Demo.ServiceD>();
-            services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.ServiceE>();
-            services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.InterfaceE>(sp => sp.GetRequiredService<global::Airflow.MSDI.AutoRegister.Demo.ServiceE>());
-            services.AddSingleton(sp => sp.GetRequiredService<global::Airflow.MSDI.AutoRegister.Demo.ServiceH>().GetServiceI());
-            services.AddScoped(sp => sp.GetRequiredService<global::Airflow.MSDI.AutoRegister.Demo.ServiceH>().GetServiceJ(sp));
             services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.ServiceH>();
-            services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.IGenericService<string>, global::Airflow.MSDI.AutoRegister.Demo.StringService>();
-            services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.InterfaceF, global::Airflow.MSDI.AutoRegister.Demo.ServiceG>();
-            services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.InterfaceF, global::Airflow.MSDI.AutoRegister.Demo.ServiceF>();
+
+            services.AddKeyedScoped<global::Airflow.MSDI.AutoRegister.Demo.ICache>("memory", (sp, _) => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ICache>(__key2));
+            services.AddKeyedSingleton<global::Airflow.MSDI.AutoRegister.Demo.ICache>("redis", (sp, _) => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ICache>(__key1));
+            services.AddTransient<global::Airflow.MSDI.AutoRegister.Demo.IView>(sp => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.MainView>(__key3));
+            services.AddTransient<global::Airflow.MSDI.AutoRegister.Demo.IViewModel>(sp => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.MainViewModel>(__key4));
+            services.AddKeyedSingleton<global::Airflow.MSDI.AutoRegister.Demo.IConnector>("replica", (sp, _) => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ReadOnlyConnector>(__key5));
+            services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.ServiceA>(sp => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceA>(__key6));
+            services.AddScoped<global::Airflow.MSDI.AutoRegister.Demo.ServiceB>(sp => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceB>(__key7));
+            services.AddTransient<global::Airflow.MSDI.AutoRegister.Demo.ServiceC>(sp => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceC>(__key8));
+            services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.InterfaceD>(sp => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceD>(__key9));
+            services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.ServiceE>(sp => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceE>(__key10));
+            services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.InterfaceE>(sp => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceE>(__key10));
+            services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.ServiceI>(sp => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceI>(__key13));
+            services.AddScoped<global::Airflow.MSDI.AutoRegister.Demo.ServiceJ>(sp => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceJ>(__key14));
+            services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.ISharedLeft>(sp => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceM>(__key15));
+            services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.ISharedRight>(sp => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceM>(__key15));
+            services.AddKeyedTransient<global::Airflow.MSDI.AutoRegister.Demo.IViewModel>("settings", (sp, _) => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.SettingsViewModel>(__key17));
+            services.AddTransient<global::Airflow.MSDI.AutoRegister.Demo.ISpecialView>(sp => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.SpecialView>(__key18));
+            services.AddKeyedSingleton<global::Airflow.MSDI.AutoRegister.Demo.SqlConnector>("primary", (sp, _) => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.SqlConnector>(__key19));
+            services.AddKeyedSingleton<global::Airflow.MSDI.AutoRegister.Demo.IConnector>("primary", (sp, _) => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.SqlConnector>(__key19));
+            services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.IGenericService<string>>(sp => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.StringService>(__key20));
+            services.AddSingleton<global::System.Collections.Generic.List<string>>(sp => sp.GetRequiredKeyedService<global::System.Collections.Generic.List<string>>(__key21));
+            services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.InterfaceF>(sp => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceG>(__key12));
+            services.AddTransient<global::Airflow.MSDI.AutoRegister.Demo.IView>(sp => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.SettingsView>(__key16));
+            services.AddSingleton<global::Airflow.MSDI.AutoRegister.Demo.InterfaceF>(sp => sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceF>(__key11));
+
+            services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ICache>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ICache>[]
+            {
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ICache>("memory", typeof(global::Airflow.MSDI.AutoRegister.Demo.ICache), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Scoped, 0),
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ICache>("redis", typeof(global::Airflow.MSDI.AutoRegister.Demo.ICache), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton, 0),
+            });
+
+            services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.Demo.ICache>>(sp => new global::Airflow.MSDI.AutoRegister.Demo.ICache[]
+            {
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ICache>(__key2),
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ICache>(__key1),
+            });
+
+            services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.IConnector>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.IConnector>[]
+            {
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.IConnector>("replica", typeof(global::Airflow.MSDI.AutoRegister.Demo.ReadOnlyConnector), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton, 0),
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.IConnector>("primary", typeof(global::Airflow.MSDI.AutoRegister.Demo.SqlConnector), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton, 0),
+            });
+
+            services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.Demo.IConnector>>(sp => new global::Airflow.MSDI.AutoRegister.Demo.IConnector[]
+            {
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ReadOnlyConnector>(__key5),
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.SqlConnector>(__key19),
+            });
+
+            services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.IGenericService<string>>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.IGenericService<string>>[]
+            {
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.IGenericService<string>>(null, typeof(global::Airflow.MSDI.AutoRegister.Demo.StringService), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton, 0),
+            });
+
+            services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.Demo.IGenericService<string>>>(sp => new global::Airflow.MSDI.AutoRegister.Demo.IGenericService<string>[]
+            {
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.StringService>(__key20),
+            });
+
+            services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ISharedLeft>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ISharedLeft>[]
+            {
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ISharedLeft>(null, typeof(global::Airflow.MSDI.AutoRegister.Demo.ServiceM), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton, 0),
+            });
+
+            services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.Demo.ISharedLeft>>(sp => new global::Airflow.MSDI.AutoRegister.Demo.ISharedLeft[]
+            {
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceM>(__key15),
+            });
+
+            services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ISharedRight>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ISharedRight>[]
+            {
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ISharedRight>(null, typeof(global::Airflow.MSDI.AutoRegister.Demo.ServiceM), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton, 0),
+            });
+
+            services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.Demo.ISharedRight>>(sp => new global::Airflow.MSDI.AutoRegister.Demo.ISharedRight[]
+            {
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceM>(__key15),
+            });
+
+            services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ISpecialView>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ISpecialView>[]
+            {
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ISpecialView>(null, typeof(global::Airflow.MSDI.AutoRegister.Demo.SpecialView), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient, 0),
+            });
+
+            services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.Demo.ISpecialView>>(sp => new global::Airflow.MSDI.AutoRegister.Demo.ISpecialView[]
+            {
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.SpecialView>(__key18),
+            });
+
+            services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.IView>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.IView>[]
+            {
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.IView>(null, typeof(global::Airflow.MSDI.AutoRegister.Demo.MainView), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient, 0),
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.IView>(null, typeof(global::Airflow.MSDI.AutoRegister.Demo.SettingsView), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient, 1),
+            });
+
+            services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.Demo.IView>>(sp => new global::Airflow.MSDI.AutoRegister.Demo.IView[]
+            {
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.MainView>(__key3),
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.SettingsView>(__key16),
+            });
+
+            services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.IViewModel>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.IViewModel>[]
+            {
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.IViewModel>(null, typeof(global::Airflow.MSDI.AutoRegister.Demo.MainViewModel), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient, 0),
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.IViewModel>("settings", typeof(global::Airflow.MSDI.AutoRegister.Demo.SettingsViewModel), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient, 0),
+            });
+
+            services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.Demo.IViewModel>>(sp => new global::Airflow.MSDI.AutoRegister.Demo.IViewModel[]
+            {
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.MainViewModel>(__key4),
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.SettingsViewModel>(__key17),
+            });
+
+            services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.InterfaceD>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.InterfaceD>[]
+            {
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.InterfaceD>(null, typeof(global::Airflow.MSDI.AutoRegister.Demo.ServiceD), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton, 0),
+            });
+
+            services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.Demo.InterfaceD>>(sp => new global::Airflow.MSDI.AutoRegister.Demo.InterfaceD[]
+            {
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceD>(__key9),
+            });
+
+            services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.InterfaceE>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.InterfaceE>[]
+            {
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.InterfaceE>(null, typeof(global::Airflow.MSDI.AutoRegister.Demo.ServiceE), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton, 0),
+            });
+
+            services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.Demo.InterfaceE>>(sp => new global::Airflow.MSDI.AutoRegister.Demo.InterfaceE[]
+            {
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceE>(__key10),
+            });
+
+            services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.InterfaceF>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.InterfaceF>[]
+            {
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.InterfaceF>(null, typeof(global::Airflow.MSDI.AutoRegister.Demo.ServiceG), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton, 1),
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.InterfaceF>(null, typeof(global::Airflow.MSDI.AutoRegister.Demo.ServiceF), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton, 2),
+            });
+
+            services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.Demo.InterfaceF>>(sp => new global::Airflow.MSDI.AutoRegister.Demo.InterfaceF[]
+            {
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceG>(__key12),
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceF>(__key11),
+            });
+
+            services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ServiceA>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ServiceA>[]
+            {
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ServiceA>(null, typeof(global::Airflow.MSDI.AutoRegister.Demo.ServiceA), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton, 0),
+            });
+
+            services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.Demo.ServiceA>>(sp => new global::Airflow.MSDI.AutoRegister.Demo.ServiceA[]
+            {
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceA>(__key6),
+            });
+
+            services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ServiceB>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ServiceB>[]
+            {
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ServiceB>(null, typeof(global::Airflow.MSDI.AutoRegister.Demo.ServiceB), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Scoped, 0),
+            });
+
+            services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.Demo.ServiceB>>(sp => new global::Airflow.MSDI.AutoRegister.Demo.ServiceB[]
+            {
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceB>(__key7),
+            });
+
+            services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ServiceC>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ServiceC>[]
+            {
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ServiceC>(null, typeof(global::Airflow.MSDI.AutoRegister.Demo.ServiceC), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient, 0),
+            });
+
+            services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.Demo.ServiceC>>(sp => new global::Airflow.MSDI.AutoRegister.Demo.ServiceC[]
+            {
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceC>(__key8),
+            });
+
+            services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ServiceE>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ServiceE>[]
+            {
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ServiceE>(null, typeof(global::Airflow.MSDI.AutoRegister.Demo.ServiceE), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton, 0),
+            });
+
+            services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.Demo.ServiceE>>(sp => new global::Airflow.MSDI.AutoRegister.Demo.ServiceE[]
+            {
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceE>(__key10),
+            });
+
+            services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ServiceI>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ServiceI>[]
+            {
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ServiceI>(null, typeof(global::Airflow.MSDI.AutoRegister.Demo.ServiceI), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton, 0),
+            });
+
+            services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.Demo.ServiceI>>(sp => new global::Airflow.MSDI.AutoRegister.Demo.ServiceI[]
+            {
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceI>(__key13),
+            });
+
+            services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ServiceJ>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ServiceJ>[]
+            {
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.ServiceJ>(null, typeof(global::Airflow.MSDI.AutoRegister.Demo.ServiceJ), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Scoped, 0),
+            });
+
+            services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.Demo.ServiceJ>>(sp => new global::Airflow.MSDI.AutoRegister.Demo.ServiceJ[]
+            {
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.ServiceJ>(__key14),
+            });
+
+            services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.SqlConnector>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.SqlConnector>[]
+            {
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Airflow.MSDI.AutoRegister.Demo.SqlConnector>("primary", typeof(global::Airflow.MSDI.AutoRegister.Demo.SqlConnector), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton, 0),
+            });
+
+            services.AddTransient<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.Demo.SqlConnector>>(sp => new global::Airflow.MSDI.AutoRegister.Demo.SqlConnector[]
+            {
+                sp.GetRequiredKeyedService<global::Airflow.MSDI.AutoRegister.Demo.SqlConnector>(__key19),
+            });
+
+            services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::System.Collections.Generic.List<string>>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::System.Collections.Generic.List<string>>[]
+            {
+                new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::System.Collections.Generic.List<string>>(null, typeof(global::System.Collections.Generic.List<string>), global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton, 0),
+            });
+
+            services.AddTransient<global::System.Collections.Generic.IEnumerable<global::System.Collections.Generic.List<string>>>(sp => new global::System.Collections.Generic.List<string>[]
+            {
+                sp.GetRequiredKeyedService<global::System.Collections.Generic.List<string>>(__key21),
+            });
         }
     }
 }
