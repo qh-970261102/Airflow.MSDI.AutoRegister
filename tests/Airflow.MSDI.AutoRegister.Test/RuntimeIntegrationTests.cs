@@ -59,6 +59,34 @@ public sealed class RuntimeIntegrationTests
             public List<TypeG1> GetTypeG1List() => new();
         }
 
+        // 多接口、同生命周期:共享一个实例
+        public interface InterfaceM1 { }
+        public interface InterfaceM2 { }
+        [SingletonService(typeof(InterfaceM1))]
+        [SingletonService(typeof(InterfaceM2))]
+        public class ServiceM : InterfaceM1, InterfaceM2 { }
+
+        // keyed:自身 + 接口同 key,共享一个实例
+        public interface IKeyed { }
+
+        [SingletonService(Key = "primary")]
+        [SingletonService(typeof(IKeyed), Key = "primary")]
+        public class KeyedA : IKeyed { }
+
+        // keyed:同一实现不同 key,仍共享一个实例
+        [SingletonService(typeof(IKeyed), Key = "k1")]
+        [SingletonService(typeof(IKeyed), Key = "k2")]
+        public class KeyedB : IKeyed { }
+
+        // keyed 与非 keyed 自注册并存,共享一个实例
+        [SingletonService]
+        [SingletonService(Key = "named")]
+        public class KeyedC { }
+
+        // 泛型特性写法 + scoped
+        [ScopedService<IKeyed>(Key = "generic")]
+        public class KeyedD : IKeyed { }
+
         public interface InterfaceD { }
         public interface InterfaceE { }
         public interface InterfaceF { }
@@ -102,8 +130,40 @@ public sealed class RuntimeIntegrationTests
 
         public object Resolve(Type serviceType) => _provider.GetRequiredService(serviceType);
 
+        public object ResolveKeyed(string typeName, object key) =>
+            _provider.GetRequiredKeyedService(GetType(typeName), key);
+
+        public List<object> ResolveAll(string typeName) =>
+            _provider.GetServices(GetType(typeName)).Select(x => (object)x!).ToList();
+
         public object ResolveFromScope(IServiceScope scope, string typeName) =>
             scope.ServiceProvider.GetRequiredService(GetType(typeName));
+
+        public object ResolveKeyedFromScope(IServiceScope scope, string typeName, object key) =>
+            scope.ServiceProvider.GetRequiredKeyedService(GetType(typeName), key);
+
+        public List<object> ResolveAllFromScope(IServiceScope scope, string typeName) =>
+            scope.ServiceProvider.GetServices(GetType(typeName)).Select(x => (object)x!).ToList();
+
+        /// <summary>反射读取 RegisterItemInfo&lt;T&gt; 列表。</summary>
+        public List<(string? Key, string ImplementationType, string Lifetime, double Order)> GetMetadata(string typeName)
+        {
+            var itemType = typeof(RegisterItemInfo<>).MakeGenericType(GetType(typeName));
+            var listType = typeof(IEnumerable<>).MakeGenericType(itemType);
+            var items = (System.Collections.IEnumerable)_provider.GetRequiredService(listType);
+
+            var rows = new List<(string?, string, string, double)>();
+            foreach (var item in items)
+            {
+                var type = item!.GetType();
+                rows.Add((
+                    (string?)type.GetProperty("Key")!.GetValue(item),
+                    ((Type)type.GetProperty("ImplementationType")!.GetValue(item)!).Name,
+                    type.GetProperty("Lifetime")!.GetValue(item)!.ToString()!,
+                    (double)type.GetProperty("Order")!.GetValue(item)!));
+            }
+            return rows;
+        }
 
         public IServiceScope CreateScope() => _provider.CreateScope();
 
@@ -217,8 +277,113 @@ public sealed class RuntimeIntegrationTests
     public void RegistrationCount_InterfaceF_HasTwo()
     {
         using var fixture = new RuntimeFixture();
-        using var scope = fixture.CreateScope();
-        var list = scope.ServiceProvider.GetServices(fixture.GetType("InterfaceF")).ToList();
+        var list = fixture.ResolveAll("InterfaceF");
         Assert.HasCount(2, list, "InterfaceF 应有两次注册(ServiceG + ServiceF)");
+    }
+
+    [TestMethod]
+    public void MultipleInterfaces_SameLifetime_ShareInstance()
+    {
+        using var fixture = new RuntimeFixture();
+        var m1 = fixture.Resolve("InterfaceM1");
+        var m2 = fixture.Resolve("InterfaceM2");
+        Assert.AreSame(m1, m2, "同一实现、同一生命周期的多条接口注册应共享实例");
+    }
+
+    [TestMethod]
+    public void KeyedSelfAndInterface_SameKey_ShareInstance()
+    {
+        using var fixture = new RuntimeFixture();
+        var self = fixture.ResolveKeyed("KeyedA", "primary");
+        var iface = fixture.ResolveKeyed("IKeyed", "primary");
+        Assert.AreSame(self, iface);
+    }
+
+    [TestMethod]
+    public void KeyedRegistration_CrossKey_ShareInstance()
+    {
+        using var fixture = new RuntimeFixture();
+        var k1 = fixture.ResolveKeyed("IKeyed", "k1");
+        var k2 = fixture.ResolveKeyed("IKeyed", "k2");
+        Assert.AreSame(k1, k2, "同一实现的不同 key 注册应共享实例");
+    }
+
+    [TestMethod]
+    public void UnkeyedAndKeyedSelf_ShareInstance()
+    {
+        using var fixture = new RuntimeFixture();
+        var plain = fixture.Resolve("KeyedC");
+        var named = fixture.ResolveKeyed("KeyedC", "named");
+        Assert.AreSame(plain, named);
+    }
+
+    [TestMethod]
+    public void GenericAttributeKeyedScoped_ResolvesPerScope()
+    {
+        using var fixture = new RuntimeFixture();
+        using var scope1 = fixture.CreateScope();
+        using var scope2 = fixture.CreateScope();
+
+        var d1 = fixture.ResolveKeyedFromScope(scope1, "IKeyed", "generic");
+        var d2 = fixture.ResolveKeyedFromScope(scope1, "IKeyed", "generic");
+        var d3 = fixture.ResolveKeyedFromScope(scope2, "IKeyed", "generic");
+
+        Assert.AreEqual("RuntimeDemo.KeyedD", d1.GetType().FullName);
+        Assert.AreSame(d1, d2);
+        Assert.AreNotSame(d1, d3);
+    }
+
+    [TestMethod]
+    public void Collection_IncludesKeyedImplementations()
+    {
+        using var fixture = new RuntimeFixture();
+        using var scope = fixture.CreateScope();
+        var all = fixture.ResolveAllFromScope(scope, "IKeyed");
+
+        Assert.HasCount(4, all, "IKeyed 集合应包含全部 4 条注册(含 keyed)");
+        CollectionAssert.AreEquivalent(
+            new[] { "RuntimeDemo.KeyedA", "RuntimeDemo.KeyedB", "RuntimeDemo.KeyedB", "RuntimeDemo.KeyedD" },
+            all.Select(x => x.GetType().FullName).ToArray());
+    }
+
+    [TestMethod]
+    public void Metadata_DescribesKeyedRegistrations()
+    {
+        using var fixture = new RuntimeFixture();
+        var rows = fixture.GetMetadata("IKeyed");
+
+        Assert.HasCount(4, rows);
+        CollectionAssert.AreEquivalent(
+            new[] { "primary", "k1", "k2", "generic" },
+            rows.Select(r => r.Key ?? "<null>").ToArray());
+        Assert.IsTrue(rows.All(r => r.Lifetime is "Singleton" or "Scoped"));
+    }
+
+    [TestMethod]
+    public void Metadata_UnkeyedMultiImplementation_HasBothEntries()
+    {
+        using var fixture = new RuntimeFixture();
+        var rows = fixture.GetMetadata("InterfaceF");
+
+        Assert.HasCount(2, rows);
+        Assert.IsTrue(rows.All(r => r.Key is null));
+        CollectionAssert.AreEquivalent(
+            new[] { "ServiceG", "ServiceF" },
+            rows.Select(r => r.ImplementationType).ToArray());
+        Assert.AreEqual(1d, rows[0].Order);
+        Assert.AreEqual(2d, rows[1].Order);
+    }
+
+    [TestMethod]
+    public void MetadataAndCollection_ForSameInstanceType()
+    {
+        using var fixture = new RuntimeFixture();
+        var rows = fixture.GetMetadata("KeyedC");
+
+        // 一个无 key、一个 keyed:元数据两条,集合两项(均解析到同一实例)
+        Assert.HasCount(2, rows);
+        var all = fixture.ResolveAll("KeyedC");
+        Assert.HasCount(2, all);
+        Assert.AreSame(all[0], all[1]);
     }
 }

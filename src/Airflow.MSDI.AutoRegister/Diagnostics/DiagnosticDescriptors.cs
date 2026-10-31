@@ -55,7 +55,7 @@ namespace Airflow.MSDI.AutoRegister.Diagnostics
             LocalizedStrings.Get("AMAR1006_Message"),
             Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
-        /// <summary>工厂方法返回类型是开放泛型/不可解析类型。</summary>
+        /// <summary>工厂方法返回类型不可解析(开放泛型/值类型/数组/指针等)。</summary>
         public static readonly DiagnosticDescriptor AMAR1007 = new(
             "AMAR1007",
             LocalizedStrings.Get("AMAR1007_Title"),
@@ -92,7 +92,7 @@ namespace Airflow.MSDI.AutoRegister.Diagnostics
             LocalizedStrings.Get("AMAR2001_Message"),
             Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
-        /// <summary>注册特性的服务类型参数不是接口/类(或为开放/未绑定泛型)。</summary>
+        /// <summary>注册特性的服务类型参数不是接口/类(或为开放/未绑定泛型/值类型)。</summary>
         public static readonly DiagnosticDescriptor AMAR2002 = new(
             "AMAR2002",
             LocalizedStrings.Get("AMAR2002_Title"),
@@ -106,19 +106,33 @@ namespace Airflow.MSDI.AutoRegister.Diagnostics
             LocalizedStrings.Get("AMAR2003_Message"),
             Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
-        /// <summary>同一 (ServiceType, ImplType) 重复注册。</summary>
+        /// <summary>完全重复的注册(同一 targettype + key + 实现)。</summary>
         public static readonly DiagnosticDescriptor AMAR2005 = new(
             "AMAR2005",
             LocalizedStrings.Get("AMAR2005_Title"),
             LocalizedStrings.Get("AMAR2005_Message"),
             Category, DiagnosticSeverity.Warning, isEnabledByDefault: true);
 
-        /// <summary>自身注册与接口注册生命周期不一致。</summary>
-        public static readonly DiagnosticDescriptor AMAR2006 = new(
-            "AMAR2006",
-            LocalizedStrings.Get("AMAR2006_Title"),
-            LocalizedStrings.Get("AMAR2006_Message"),
-            Category, DiagnosticSeverity.Warning, isEnabledByDefault: true);
+        /// <summary>实现类型与服务类型不兼容(无法隐式转换)。</summary>
+        public static readonly DiagnosticDescriptor AMAR2007 = new(
+            "AMAR2007",
+            LocalizedStrings.Get("AMAR2007_Title"),
+            LocalizedStrings.Get("AMAR2007_Message"),
+            Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+        /// <summary>实现类型不可实例化(abstract / static)。</summary>
+        public static readonly DiagnosticDescriptor AMAR2008 = new(
+            "AMAR2008",
+            LocalizedStrings.Get("AMAR2008_Title"),
+            LocalizedStrings.Get("AMAR2008_Message"),
+            Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+        /// <summary>同一 targettype 下命名 key 重复(不同实现)。</summary>
+        public static readonly DiagnosticDescriptor AMAR2009 = new(
+            "AMAR2009",
+            LocalizedStrings.Get("AMAR2009_Title"),
+            LocalizedStrings.Get("AMAR2009_Message"),
+            Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
         // ---- 3. AutoRegister 方法相关 ----
 
@@ -207,5 +221,19 @@ namespace Airflow.MSDI.AutoRegister.Diagnostics
             LocalizedStrings.Get("AMAR4005_Title"),
             LocalizedStrings.Get("AMAR4005_Message"),
             Category, DiagnosticSeverity.Warning, isEnabledByDefault: true);
+
+        /// <summary>泛型注册特性的类型参数超过 1 个。</summary>
+        public static readonly DiagnosticDescriptor AMAR4006 = new(
+            "AMAR4006",
+            LocalizedStrings.Get("AMAR4006_Title"),
+            LocalizedStrings.Get("AMAR4006_Message"),
+            Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+        /// <summary>泛型目标类型与 typeof(...) 服务类型冲突。</summary>
+        public static readonly DiagnosticDescriptor AMAR4007 = new(
+            "AMAR4007",
+            LocalizedStrings.Get("AMAR4007_Title"),
+            LocalizedStrings.Get("AMAR4007_Message"),
+            Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
     }
 }

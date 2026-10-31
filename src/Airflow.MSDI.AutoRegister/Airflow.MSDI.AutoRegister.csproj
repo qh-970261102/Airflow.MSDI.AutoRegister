@@ -10,10 +10,10 @@
 
     <!-- NuGet 打包 -->
     <PackageId>Airflow.MSDI.AutoRegister</PackageId>
-    <Version>1.2.0</Version>
+    <Version>2.0.0</Version>
     <Authors>Airflow</Authors>
-    <Description>A source generator for Microsoft.Extensions.DependencyInjection that auto-registers your services at compile time. Zero reflection, zero runtime overhead. 基于源生成器的 MSDI 自动注册库,编译期生成注册代码,零反射、零运行时开销。</Description>
-    <PackageTags>msdi;dependency-injection;di;source-generator;autoregister;generator</PackageTags>
+    <Description>A source generator for Microsoft.Extensions.DependencyInjection that auto-registers your services at compile time - keyed services, generic attributes, registration metadata and aggregate collections, zero reflection, zero runtime overhead. 基于源生成器的 MSDI 自动注册库:编译期生成 keyed/非 keyed 注册、注册元数据与实现集合,零反射、零运行时开销。</Description>
+    <PackageTags>msdi;dependency-injection;di;source-generator;autoregister;generator;keyed-services;keyed</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryType>git</RepositoryType>
@@ -29,7 +29,7 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" PrivateAssets="all" />
     <!-- 属性类型引用 MSDI 的 ServiceLifetime/IServiceCollection,需作为传递依赖 -->
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="1.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>

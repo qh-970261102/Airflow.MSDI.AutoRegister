@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using Airflow.MSDI.AutoRegister.Diagnostics;
@@ -11,10 +12,10 @@ using Microsoft.CodeAnalysis.Text;
 namespace Airflow.MSDI.AutoRegister.Generator;
 
 /// <summary>
-/// 1.1 源生成器:
+/// 2.0 源生成器:
 /// - 为程序集内唯一合法的 [AutoRegister] partial 方法生成实现;
-/// - 对非法形态输出 AMAR 系列 Diagnostic(Error 阻止编译,Warning 仅提示);
-/// - 报错的注册条目不再生成对应代码,避免在诊断之上叠加迷惑的编译器错误。
+/// - 支持 keyed 注册、按 (实现, 生命周期) 共享的锚点、泛型 targettype、注册元数据与实现集合;
+/// - 对非法形态输出 AMAR 系列 Diagnostic(Error 阻止编译,Warning 仅提示),报错的注册条目不再生成代码。
 /// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class AutoRegisterGenerator : IIncrementalGenerator
@@ -65,7 +66,7 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
         if (method is null || !analyzer.IsPrimaryAutoRegisterValid)
             return;
 
-        var body = analyzer.BuildRegistrationBody();
+        var body = analyzer.BuildBody();
         if (string.IsNullOrEmpty(body))
             return;
 
@@ -74,47 +75,68 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
         spc.AddSource(hintName, SourceText.From(code, Encoding.UTF8));
     }
 
-    /// <summary>解析结果模型:一条注册。</summary>
-    private enum EntryKind
+    /// <summary>一条注册(一个特性使用点对应一条)。</summary>
+    private sealed class Registration
     {
-        /// <summary>类自身注册:AddLifetime&lt;T&gt;()</summary>
-        ClassSelf,
-        /// <summary>类接口注册(类有自身注册):AddLifetime&lt;S&gt;(sp =&gt; sp.GetRequiredService&lt;T&gt;())</summary>
-        ClassInterfaceViaSelf,
-        /// <summary>类接口注册(类无自身注册):AddLifetime&lt;S, T&gt;()</summary>
-        ClassInterfaceDirect,
-        /// <summary>工厂方法拥有类的自动单例注册:AddSingleton&lt;Owner&gt;()</summary>
-        FactoryOwner,
-        /// <summary>工厂方法注册:AddLifetime&lt;R&gt;(sp =&gt; sp.GetRequiredService&lt;Owner&gt;().Method(...))</summary>
-        FactoryMethod,
+        /// <summary>服务类型(targettype)。</summary>
+        public INamedTypeSymbol ServiceType { get; set; } = null!;
+
+        /// <summary>服务 key;null 表示非 keyed。</summary>
+        public string? Key { get; set; }
+
+        /// <summary>生命周期:0=Singleton, 1=Scoped, 2=Transient。</summary>
+        public int Lifetime { get; set; }
+
+        public double Order { get; set; }
+
+        /// <summary>锚点注册使用的类型:类注册=实现类型,工厂注册=方法返回类型。</summary>
+        public INamedTypeSymbol InstanceType { get; set; } = null!;
+
+        /// <summary>分组与去重使用的生产者:类注册=实现类型,工厂注册=方法。</summary>
+        public ISymbol Producer { get; set; } = null!;
+
+        /// <summary>元数据里的 ImplementationType:类注册=实现类型,工厂注册=方法返回类型。</summary>
+        public ITypeSymbol ImplDisplay { get; set; } = null!;
+
+        public IMethodSymbol? FactoryMethod { get; set; }
+
+        public Location? Location { get; set; }
+
+        public int Seq { get; set; }
+
+        /// <summary>命中 Error 诊断后被丢弃,不参与生成。</summary>
+        public bool Dropped { get; set; }
+
+        public RegistrationGroup Group { get; set; } = null!;
     }
 
-    private sealed class Entry
+    /// <summary>同一 (生产者, 生命周期) 的注册集合,锚点决策以组为单位。</summary>
+    private sealed class RegistrationGroup
     {
-        public EntryKind Kind { get; set; }
-        public double Order { get; set; }
-        /// <summary>排序键:实现类型全名(工厂条目用拥有类全名,保证同组相邻)。</summary>
-        public string SortName { get; set; } = null!;
-        public int Seq { get; set; }
-        /// <summary>生命周期值:0=Singleton, 1=Scoped, 2=Transient。</summary>
-        public int Lifetime { get; set; } = -1;
-        /// <summary>该注册对应的特性位置(用于重复注册等诊断)。</summary>
-        public Location? Location { get; set; }
-        /// <summary>生命周期方法名:AddSingleton / AddScoped / AddTransient。</summary>
-        public string? LifetimeMethod { get; set; }
-        /// <summary>类注册的实现类型(自身注册时也是服务类型)。</summary>
-        public INamedTypeSymbol? ImplType { get; set; }
-        /// <summary>类接口注册的服务类型。</summary>
-        public INamedTypeSymbol? ServiceType { get; set; }
-        /// <summary>工厂拥有类。</summary>
-        public INamedTypeSymbol? FactoryOwner { get; set; }
-        /// <summary>工厂方法。</summary>
-        public IMethodSymbol? FactoryMethod { get; set; }
+        public RegistrationGroup(ISymbol producer, int lifetime)
+        {
+            Producer = producer;
+            Lifetime = lifetime;
+        }
+
+        public ISymbol Producer { get; }
+
+        public int Lifetime { get; }
+
+        public List<Registration> Registrations { get; } = new();
+
+        /// <summary>内部 object key 变量名(如 __key1)。每个组都使用锚点注册。</summary>
+        public string AnchorKey { get; set; } = null!;
+
+        public INamedTypeSymbol InstanceType => Registrations[0].InstanceType;
     }
 
     private sealed class AssemblyAnalyzer
     {
+        private const string Indent = "            ";
+
         private readonly Compilation _compilation;
+        private readonly CSharpCompilation? _csharpCompilation;
         private readonly INamedTypeSymbol _baseAttributeType;
         private readonly INamedTypeSymbol _autoRegisterAttributeType;
         private readonly INamedTypeSymbol _optionsAttributeType;
@@ -123,7 +145,7 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
         private readonly INamedTypeSymbol? _serviceLifetimeType;
         private readonly INamedTypeSymbol? _systemType;
 
-        private readonly List<Entry> _entries = new();
+        private readonly List<Registration> _registrations = new();
         private readonly List<IMethodSymbol> _autoRegisterMethods = new();
         private readonly Dictionary<IMethodSymbol, bool> _autoRegisterValidity = new(SymbolEqualityComparer.Default);
         private readonly HashSet<INamedTypeSymbol> _validatedAttributeClasses = new(SymbolEqualityComparer.Default);
@@ -144,6 +166,7 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
             INamedTypeSymbol? systemType)
         {
             _compilation = compilation;
+            _csharpCompilation = compilation as CSharpCompilation;
             _baseAttributeType = baseAttributeType;
             _autoRegisterAttributeType = autoRegisterAttributeType;
             _optionsAttributeType = optionsAttributeType;
@@ -180,8 +203,8 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
                 }
             }
 
-            // AMAR2005: 重复注册(跨类、跨方法)。
-            ReportDuplicates(spc);
+            // AMAR2005 / AMAR2009: 完全重复与命名 key 冲突。
+            ValidateDuplicateRegistrations(spc);
         }
 
         private void AnalyzeType(SourceProductionContext spc, INamedTypeSymbol type)
@@ -247,108 +270,59 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
                 return;
             }
 
-            // 第一遍:过滤元数据损坏的特性类,并确定是否存在自身注册。
-            var validAttrs = new List<AttributeData>();
-            var hasSelf = false;
+            // AMAR2008: 实现类型必须可实例化。
+            if (type.IsAbstract || type.IsStatic)
+            {
+                ReportOnce(spc, "2008:" + MsgName(type), DiagnosticDescriptors.AMAR2008, LocationOf(type), MsgName(type));
+                return;
+            }
+
             foreach (var attr in attrs)
             {
                 if (!ValidateAttributeClass(spc, attr.AttributeClass))
                     continue;
-                validAttrs.Add(attr);
-                var (rawServiceType, hasInvalidServiceType) = ReadServiceType(attr);
-                if (!hasInvalidServiceType && rawServiceType is null)
-                    hasSelf = true;
-            }
 
-            var classEntries = new List<Entry>();
-            var selfLifetime = -1;
+                var location = AttrLocation(attr) ?? LocationOf(type) ?? Location.None;
 
-            foreach (var attr in validAttrs)
-            {
-                var attrLocation = AttrLocation(attr) ?? LocationOf(type);
-
-                // AMAR2002: 服务类型必须是接口/类;闭合泛型(如 InterfaceA<TypeA>)原样填入,
-                // 开放/未绑定泛型(如 InterfaceA<> 或含类型参数)不支持。
-                var (rawServiceType, hasInvalidServiceType) = ReadServiceType(attr);
-                var serviceType = rawServiceType as INamedTypeSymbol;
-                if (hasInvalidServiceType)
-                {
-                    Report(spc, DiagnosticDescriptors.AMAR2002, attrLocation, MsgName(rawServiceType ?? attr.AttributeClass!));
+                // 服务类型:泛型目标 > typeof(...) > 自身。
+                if (!TryResolveServiceType(spc, attr, location, out var declaredType))
                     continue;
-                }
-                if (serviceType is not null &&
-                    (serviceType.TypeKind != TypeKind.Class && serviceType.TypeKind != TypeKind.Interface))
-                {
-                    Report(spc, DiagnosticDescriptors.AMAR2002, attrLocation, MsgName(serviceType));
-                    continue;
-                }
-                // 未绑定泛型(如 InterfaceA<> 的 TypeArguments 为空,须显式检查)或
-                // 类型参数仍存在于实参中(开放构造泛型)都不支持。
-                if (serviceType is not null &&
-                    (serviceType.IsUnboundGenericType || ContainsTypeParameter(serviceType)))
-                {
-                    Report(spc, DiagnosticDescriptors.AMAR2002, attrLocation, MsgName(serviceType));
-                    continue;
-                }
 
                 var (lifetimeMethod, lifetime, order) = ParseLifetimeAndOrder(spc, attr);
                 if (lifetimeMethod is null)
                     continue; // AMAR4004 已在 ParseLifetimeAndOrder 内报告
 
-                Entry entry;
-                if (serviceType is null)
-                {
-                    entry = new Entry
-                    {
-                        Kind = EntryKind.ClassSelf,
-                        Order = order,
-                        SortName = Fmt(type),
-                        Seq = _seq++,
-                        Lifetime = lifetime,
-                        LifetimeMethod = lifetimeMethod,
-                        ImplType = type,
-                        Location = attrLocation,
-                    };
-                    selfLifetime = lifetime;
-                }
-                else
-                {
-                    entry = new Entry
-                    {
-                        Kind = hasSelf ? EntryKind.ClassInterfaceViaSelf : EntryKind.ClassInterfaceDirect,
-                        Order = order,
-                        SortName = Fmt(type),
-                        Seq = _seq++,
-                        Lifetime = lifetime,
-                        LifetimeMethod = lifetimeMethod,
-                        ImplType = type,
-                        ServiceType = serviceType,
-                        Location = attrLocation,
-                    };
-                }
-                _entries.Add(entry);
-                classEntries.Add(entry);
-            }
+                if (TryReadNamedOrder(attr, out var namedOrder))
+                    order = namedOrder;
+                TryReadKey(attr, out var key);
 
-            // AMAR2006: 自身注册与接口注册生命周期不一致。
-            if (hasSelf && selfLifetime >= 0)
-            {
-                foreach (var e in classEntries)
+                var serviceType = declaredType ?? type;
+
+                // AMAR2007: 实现类型必须能隐式转换为服务类型。
+                if (!HasImplicitConversion(type, serviceType))
                 {
-                    if (e.Kind == EntryKind.ClassInterfaceViaSelf && e.Lifetime != selfLifetime)
-                    {
-                        ReportOnce(spc, "2006:" + MsgName(type), DiagnosticDescriptors.AMAR2006,
-                            LocationOf(type), MsgName(type), LifetimeName(selfLifetime), LifetimeName(e.Lifetime));
-                        break;
-                    }
+                    Report(spc, DiagnosticDescriptors.AMAR2007, location, MsgName(type), MsgName(serviceType));
+                    continue;
                 }
+
+                _registrations.Add(new Registration
+                {
+                    ServiceType = serviceType,
+                    Key = key,
+                    Lifetime = lifetime,
+                    Order = order,
+                    InstanceType = type,
+                    Producer = type,
+                    ImplDisplay = type,
+                    Location = location,
+                    Seq = _seq++,
+                });
             }
         }
 
         private void AnalyzeFactoryMethods(SourceProductionContext spc, INamedTypeSymbol owner, List<IMethodSymbol> methods)
         {
             var ownerHasServiceAttributes = owner.GetAttributes().Any(a => IsServiceAttribute(a.AttributeClass));
-            var ownerAutoRegisterNeeded = false;
 
             foreach (var method in methods)
             {
@@ -359,69 +333,137 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
                 if (ownerHasServiceAttributes)
                 {
                     // AMAR1002: 拥有工厂方法的类不能再添加注册特性(拥有类会被自动注册为单例)。
-                    ReportOnce(spc, "1002:" + MsgName(owner), DiagnosticDescriptors.AMAR1002,
-                        LocationOf(owner), MsgName(owner));
+                    ReportOnce(spc, "1002:" + MsgName(owner), DiagnosticDescriptors.AMAR1002, LocationOf(owner), MsgName(owner));
                     continue;
                 }
 
-                var added = false;
+                var returnType = (INamedTypeSymbol)method.ReturnType;
+
                 foreach (var attr in method.GetAttributes().Where(a => IsServiceAttribute(a.AttributeClass)))
                 {
                     if (!ValidateAttributeClass(spc, attr.AttributeClass))
                         continue; // 特性类元数据损坏 → 跳过该注册
 
+                    var location = AttrLocation(attr) ?? LocationOf(method) ?? Location.None;
+
+                    if (!TryResolveServiceType(spc, attr, location, out var declaredType))
+                        continue;
+
                     var (lifetimeMethod, lifetime, order) = ParseLifetimeAndOrder(spc, attr);
                     if (lifetimeMethod is null)
-                        continue; // AMAR4004 已在 ParseLifetimeAndOrder 内报告
+                        continue;
+
+                    if (TryReadNamedOrder(attr, out var namedOrder))
+                        order = namedOrder;
+                    TryReadKey(attr, out var key);
+
+                    var serviceType = declaredType ?? returnType;
+
+                    // AMAR2007: 工厂返回值必须能隐式转换为服务类型。
+                    if (!HasImplicitConversion(returnType, serviceType))
+                    {
+                        Report(spc, DiagnosticDescriptors.AMAR2007, location, MsgName(returnType), MsgName(serviceType));
+                        continue;
+                    }
 
                     // AMAR1010: 单例工厂不允许 IServiceProvider 参数。
                     if (lifetime == 0 && callArgs == "sp")
                     {
-                        Report(spc, DiagnosticDescriptors.AMAR1010, AttrLocation(attr) ?? LocationOf(method), method.Name);
+                        Report(spc, DiagnosticDescriptors.AMAR1010, location, method.Name);
                         continue;
                     }
 
-                    _entries.Add(new Entry
+                    _registrations.Add(new Registration
                     {
-                        Kind = EntryKind.FactoryMethod,
-                        Order = order,
-                        SortName = Fmt(owner),
-                        Seq = _seq++,
+                        ServiceType = serviceType,
+                        Key = key,
                         Lifetime = lifetime,
-                        LifetimeMethod = lifetimeMethod,
-                        FactoryOwner = owner,
+                        Order = order,
+                        InstanceType = returnType,
+                        Producer = method,
+                        ImplDisplay = returnType,
                         FactoryMethod = method,
-                        Location = AttrLocation(attr),
+                        Location = location,
+                        Seq = _seq++,
                     });
-                    added = true;
                 }
-
-                if (added)
-                    ownerAutoRegisterNeeded = true;
             }
-
-            if (ownerAutoRegisterNeeded)
-                RegisterFactoryOwner(owner);
         }
 
-        /// <summary>拥有类自动注册为单例(若自身未通过特性注册)。</summary>
-        private void RegisterFactoryOwner(INamedTypeSymbol owner)
+        /// <summary>解析服务类型:泛型目标 > typeof(...) > 无(null 表示自身/返回类型)。</summary>
+        private bool TryResolveServiceType(SourceProductionContext spc, AttributeData attr, Location location, out INamedTypeSymbol? serviceType)
         {
-            var ownerHasAttributeRegistration = owner.GetAttributes().Any(a => IsServiceAttribute(a.AttributeClass));
-            if (ownerHasAttributeRegistration)
-                return;
+            serviceType = null;
 
-            _entries.Add(new Entry
+            if (!TryGetGenericTarget(spc, attr, location, out var genericTarget))
+                return false;
+
+            var (rawServiceType, hasInvalidServiceType) = ReadServiceType(attr);
+            if (hasInvalidServiceType || (rawServiceType is not null && rawServiceType is not INamedTypeSymbol))
             {
-                Kind = EntryKind.FactoryOwner,
-                Order = 0,
-                SortName = Fmt(owner),
-                Seq = _seq++,
-                Lifetime = 0,
-                LifetimeMethod = "AddSingleton",
-                ImplType = owner,
-                Location = LocationOf(owner),
-            });
+                Report(spc, DiagnosticDescriptors.AMAR2002, location, MsgName(rawServiceType ?? attr.AttributeClass!));
+                return false;
+            }
+
+            var fromConstructor = rawServiceType as INamedTypeSymbol;
+
+            // AMAR4007: 泛型目标与构造参数同时提供且不一致(仅自定义泛型特性可能触发)。
+            if (genericTarget is not null && fromConstructor is not null &&
+                !SymbolEqualityComparer.Default.Equals(genericTarget, fromConstructor))
+            {
+                Report(spc, DiagnosticDescriptors.AMAR4007, location,
+                    MsgName(genericTarget), MsgName(fromConstructor), MsgName(attr.AttributeClass!));
+                return false;
+            }
+
+            serviceType = genericTarget ?? fromConstructor;
+            if (serviceType is not null && !ValidateServiceTypeSymbol(spc, location, serviceType))
+                return false;
+
+            return true;
+        }
+
+        /// <summary>读取泛型特性的 targettype;带 2 个及以上类型参数时报 AMAR4006。</summary>
+        private bool TryGetGenericTarget(SourceProductionContext spc, AttributeData attr, Location location, out INamedTypeSymbol? target)
+        {
+            target = null;
+            var attributeClass = attr.AttributeClass;
+            if (attributeClass is null || !attributeClass.IsGenericType)
+                return true;
+
+            if (attributeClass.TypeArguments.Length != 1)
+            {
+                Report(spc, DiagnosticDescriptors.AMAR4006, location,
+                    MsgName(attributeClass), attributeClass.TypeArguments.Length);
+                return false;
+            }
+
+            if (attributeClass.TypeArguments[0] is INamedTypeSymbol namedTarget)
+            {
+                target = namedTarget;
+                return true;
+            }
+
+            Report(spc, DiagnosticDescriptors.AMAR2002, location, MsgName(attributeClass.TypeArguments[0]));
+            return false;
+        }
+
+        private bool ValidateServiceTypeSymbol(SourceProductionContext spc, Location location, INamedTypeSymbol serviceType)
+        {
+            // AMAR2002: 服务类型必须是接口/类;闭合泛型原样填入,开放/未绑定泛型不支持。
+            if (serviceType.TypeKind != TypeKind.Class && serviceType.TypeKind != TypeKind.Interface)
+            {
+                Report(spc, DiagnosticDescriptors.AMAR2002, location, MsgName(serviceType));
+                return false;
+            }
+
+            if (serviceType.IsUnboundGenericType || ContainsTypeParameter(serviceType))
+            {
+                Report(spc, DiagnosticDescriptors.AMAR2002, location, MsgName(serviceType));
+                return false;
+            }
+
+            return true;
         }
 
         /// <summary>校验工厂方法形态,输出所有适用诊断;返回形态是否合法。</summary>
@@ -466,10 +508,11 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
                 ok = false;
             }
 
-            // AMAR1007: 返回类型必须是可解析的具名类型(闭合泛型如 List<TypeA> 支持,开放/未绑定泛型不支持)。
+            // AMAR1007: 返回类型必须是可解析的引用类型(闭合泛型如 List<TypeA> 支持)。
             if (method.ReturnType is not INamedTypeSymbol returnType ||
                 returnType.IsUnboundGenericType ||
                 ContainsTypeParameter(returnType) ||
+                returnType.IsValueType ||
                 returnType is IErrorTypeSymbol)
             {
                 Report(spc, DiagnosticDescriptors.AMAR1007, LocationOf(method), method.Name);
@@ -795,6 +838,47 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
             return (lifetimeMethod, lifetimeInt, order);
         }
 
+        /// <summary>读取 Key 命名参数;null 表示非 keyed。</summary>
+        private static void TryReadKey(AttributeData attr, out string? key)
+        {
+            key = null;
+            foreach (var named in attr.NamedArguments)
+            {
+                if (named.Key != "Key")
+                    continue;
+                if (named.Value.IsNull)
+                    return;
+                key = named.Value.Value as string;
+                return;
+            }
+        }
+
+        /// <summary>读取 Order 命名参数(优先于构造参数)。</summary>
+        private static bool TryReadNamedOrder(AttributeData attr, out double order)
+        {
+            order = 0;
+            foreach (var named in attr.NamedArguments)
+            {
+                if (named.Key != "Order" || named.Value.IsNull)
+                    continue;
+                if (named.Value.Value is double d)
+                {
+                    order = d;
+                    return true;
+                }
+                try
+                {
+                    order = Convert.ToDouble(named.Value.Value, CultureInfo.InvariantCulture);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+            return false;
+        }
+
         private static bool ReadConstructorArg(AttributeData attr, int index, out object? value)
         {
             value = null;
@@ -817,92 +901,245 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
             return false;
         }
 
-        /// <summary>排序 + 渲染注册体。</summary>
-        public string BuildRegistrationBody()
+        private bool HasImplicitConversion(ITypeSymbol from, ITypeSymbol to)
         {
-            var sorted = _entries
-                .OrderBy(e => e.Order)
-                .ThenBy(e => e.SortName, StringComparer.Ordinal)
-                .ThenBy(e => e.Seq)
-                .ToList();
-
-            var sb = new StringBuilder();
-            foreach (var e in sorted)
-            {
-                switch (e.Kind)
-                {
-                    case EntryKind.ClassSelf:
-                        sb.AppendLine($"            services.{e.LifetimeMethod}<{Fmt(e.ImplType!)}>();");
-                        break;
-                    case EntryKind.ClassInterfaceViaSelf:
-                        sb.AppendLine($"            services.{e.LifetimeMethod}<{Fmt(e.ServiceType!)}>(sp => sp.GetRequiredService<{Fmt(e.ImplType!)}>());");
-                        break;
-                    case EntryKind.ClassInterfaceDirect:
-                        sb.AppendLine($"            services.{e.LifetimeMethod}<{Fmt(e.ServiceType!)}, {Fmt(e.ImplType!)}>();");
-                        break;
-                    case EntryKind.FactoryOwner:
-                        sb.AppendLine($"            services.AddSingleton<{Fmt(e.ImplType!)}>();");
-                        break;
-                    case EntryKind.FactoryMethod:
-                        // 服务类型由 lambda 返回值推断:AddLifetime(sp => ...)。
-                        // 推断结果恒等于工厂方法的声明返回类型,无需显式写出(闭合泛型也原样生效)。
-                        var owner = Fmt(e.FactoryOwner!);
-                        var method = e.FactoryMethod!;
-                        var args = method.Parameters.Length == 0 ? "" : "sp";
-                        sb.AppendLine($"            services.{e.LifetimeMethod}(sp => sp.GetRequiredService<{owner}>().{method.Name}({args}));");
-                        break;
-                }
-            }
-            return sb.ToString();
+            if (SymbolEqualityComparer.Default.Equals(from, to))
+                return true;
+            return _csharpCompilation is null || _csharpCompilation.ClassifyConversion(from, to).IsImplicit;
         }
 
-        private void ReportDuplicates(SourceProductionContext spc)
+        /// <summary>AMAR2005(完全重复)/ AMAR2009(同一 targettype 下命名 key 冲突)。</summary>
+        private void ValidateDuplicateRegistrations(SourceProductionContext spc)
         {
-            var groups = new Dictionary<(ITypeSymbol Service, ITypeSymbol Impl), List<Entry>>(TypePairComparer.Instance);
-            foreach (var e in _entries)
+            var groups = new Dictionary<(INamedTypeSymbol Service, string? Key), List<Registration>>(ServiceKeyComparer.Instance);
+            foreach (var r in _registrations)
             {
-                switch (e.Kind)
+                var k = (r.ServiceType, r.Key);
+                if (!groups.TryGetValue(k, out var list))
                 {
-                    case EntryKind.ClassSelf:
-                    case EntryKind.FactoryOwner:
-                        AddToGroup(groups, e, e.ImplType!, e.ImplType!);
-                        break;
-                    case EntryKind.ClassInterfaceViaSelf:
-                    case EntryKind.ClassInterfaceDirect:
-                        AddToGroup(groups, e, e.ServiceType!, e.ImplType!);
-                        break;
-                    case EntryKind.FactoryMethod:
-                        AddToGroup(groups, e, e.FactoryMethod!.ReturnType, e.FactoryOwner!);
-                        break;
+                    list = new List<Registration>();
+                    groups[k] = list;
                 }
+                list.Add(r);
             }
 
             foreach (var kvp in groups)
             {
-                if (kvp.Value.Count < 2)
+                var ordered = kvp.Value.OrderBy(r => r.Seq).ToList();
+                if (ordered.Count < 2)
                     continue;
-                foreach (var e in kvp.Value.Skip(1))
+
+                var first = ordered[0];
+                var reportedProducers = new HashSet<ISymbol>(SymbolEqualityComparer.Default) { first.Producer };
+
+                foreach (var r in ordered.Skip(1))
                 {
-                    // AMAR2005: 重复注册,后注册者胜出。
-                    Report(spc, DiagnosticDescriptors.AMAR2005, e.Location, MsgName(kvp.Key.Service), MsgName(kvp.Key.Impl));
+                    if (SymbolEqualityComparer.Default.Equals(r.Producer, first.Producer))
+                    {
+                        // 完全重复:仅告警,不跳过(MSDI 后注册胜出,与 1.x 行为一致)。
+                        Report(spc, DiagnosticDescriptors.AMAR2005, r.Location,
+                            MsgName(kvp.Key.Service), MsgName(r.ImplDisplay), KeyLiteral(r.Key));
+                        continue;
+                    }
+
+                    // 无 key 的多实现:允许(1.x 的 Order 竞争)。
+                    if (r.Key is null)
+                        continue;
+
+                    if (reportedProducers.Add(r.Producer))
+                    {
+                        Report(spc, DiagnosticDescriptors.AMAR2009, r.Location,
+                            MsgName(kvp.Key.Service), KeyLiteral(r.Key), MsgName(first.ImplDisplay));
+                    }
+                    r.Dropped = true;
                 }
             }
         }
 
-        private static void AddToGroup(
-            Dictionary<(ITypeSymbol Service, ITypeSymbol Impl), List<Entry>> groups,
-            Entry entry,
-            ITypeSymbol service,
-            ITypeSymbol impl)
+        // ------------------------------------------------------------------
+        // 生成
+        // ------------------------------------------------------------------
+
+        /// <summary>排序 + 渲染注册体(锚点 → 服务注册 → 元数据 → 实现集合)。</summary>
+        public string BuildBody()
         {
-            var key = (service, impl);
-            if (!groups.TryGetValue(key, out var list))
+            var registrations = _registrations.Where(r => !r.Dropped).ToList();
+            if (registrations.Count == 0)
+                return string.Empty;
+
+            // 1) 按 (生产者, 生命周期) 分组
+            var byProducer = new Dictionary<ISymbol, RegistrationGroup?[]>(SymbolEqualityComparer.Default);
+            var groups = new List<RegistrationGroup>();
+            foreach (var r in registrations)
             {
-                list = new List<Entry>();
-                groups[key] = list;
+                if (!byProducer.TryGetValue(r.Producer, out var slots))
+                {
+                    slots = new RegistrationGroup?[3];
+                    byProducer[r.Producer] = slots;
+                }
+
+                var group = slots[r.Lifetime];
+                if (group is null)
+                {
+                    group = new RegistrationGroup(r.Producer, r.Lifetime);
+                    slots[r.Lifetime] = group;
+                    groups.Add(group);
+                }
+
+                group.Registrations.Add(r);
+                r.Group = group;
             }
-            list.Add(entry);
+
+            // 2) 锚点:每个 (实现, 生命周期) 组一个内部 object key(单条注册也一视同仁)
+            var anchoredGroups = groups
+                .OrderBy(g => Fmt(g.InstanceType), StringComparer.Ordinal)
+                .ThenBy(g => g.Lifetime)
+                .ToList();
+            for (var i = 0; i < anchoredGroups.Count; i++)
+                anchoredGroups[i].AnchorKey = "__key" + (i + 1).ToString(CultureInfo.InvariantCulture);
+
+            var sb = new StringBuilder();
+
+            // 3) 锚点(每个实现、每个生命周期一个内部 object key)
+            foreach (var group in anchoredGroups)
+                AppendAnchor(sb, group);
+            sb.AppendLine();
+
+            // 6) 工厂拥有类(自动注册为非 keyed 单例,每类一次)
+            var owners = registrations
+                .Where(r => r.FactoryMethod is not null)
+                .Select(r => r.FactoryMethod!.ContainingType)
+                .Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default)
+                .OrderBy(Fmt, StringComparer.Ordinal)
+                .ToList();
+            if (owners.Count > 0)
+            {
+                foreach (var owner in owners)
+                    sb.AppendLine($"{Indent}services.AddSingleton<{Fmt(owner)}>();");
+                sb.AppendLine();
+            }
+
+            // 4) 服务注册(全部是锚点别名,按 Order → 实现类型名 → key 排序)
+            foreach (var r in registrations
+                         .OrderBy(r => r.Order)
+                         .ThenBy(r => Fmt(r.InstanceType), StringComparer.Ordinal)
+                         .ThenBy(r => r.Key, StringComparer.Ordinal)
+                         .ThenBy(r => r.Seq))
+            {
+                sb.AppendLine(EmitRegistration(r));
+            }
+
+            // 5) 元数据与实现集合(按服务类型分组)
+            var serviceTypes = registrations
+                .Select(r => r.ServiceType)
+                .Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default)
+                .OrderBy(Fmt, StringComparer.Ordinal)
+                .ToList();
+
+            foreach (var serviceType in serviceTypes)
+            {
+                var items = registrations
+                    .Where(r => SymbolEqualityComparer.Default.Equals(r.ServiceType, serviceType))
+                    .OrderBy(r => r.Order)
+                    .ThenBy(r => Fmt(r.ImplDisplay), StringComparer.Ordinal)
+                    .ThenBy(r => r.Key, StringComparer.Ordinal)
+                    .ThenBy(r => r.Seq)
+                    .ToList();
+
+                sb.AppendLine();
+                AppendMetadata(sb, serviceType, items);
+                sb.AppendLine();
+                AppendCollection(sb, serviceType, items);
+            }
+
+            return sb.ToString();
         }
+
+        private void AppendAnchor(StringBuilder sb, RegistrationGroup group)
+        {
+            var lifetimeMethod = LifetimeMethod(group.Lifetime);
+            var keyedMethod = KeyedMethod(lifetimeMethod);
+            var instanceType = Fmt(group.InstanceType);
+            var sample = group.Registrations[0];
+            var suffix = sample.FactoryMethod is null ? string.Empty : " / 工厂方法";
+
+            sb.AppendLine($"{Indent}// 锚点:{instanceType}({LifetimeName(group.Lifetime)}){suffix}");
+            sb.AppendLine($"{Indent}object {group.AnchorKey} = new object();");
+            if (sample.FactoryMethod is { } method)
+            {
+                var owner = Fmt(method.ContainingType);
+                var args = method.Parameters.Length == 0 ? string.Empty : "sp";
+                sb.AppendLine($"{Indent}services.{keyedMethod}<{instanceType}>({group.AnchorKey}, (sp, _) => sp.GetRequiredService<{owner}>().{method.Name}({args}));");
+            }
+            else
+            {
+                sb.AppendLine($"{Indent}services.{keyedMethod}<{instanceType}>({group.AnchorKey});");
+            }
+        }
+
+        private static string EmitRegistration(Registration r)
+        {
+            var lifetimeMethod = LifetimeMethod(r.Lifetime);
+            var keyedMethod = KeyedMethod(lifetimeMethod);
+            var serviceType = Fmt(r.ServiceType);
+            var resolve = $"sp.GetRequiredKeyedService<{Fmt(r.InstanceType)}>({r.Group.AnchorKey})";
+
+            return r.Key is null
+                ? $"{Indent}services.{lifetimeMethod}<{serviceType}>(sp => {resolve});"
+                : $"{Indent}services.{keyedMethod}<{serviceType}>({KeyLiteral(r.Key)}, (sp, _) => {resolve});";
+        }
+
+        private static void AppendMetadata(StringBuilder sb, INamedTypeSymbol serviceType, List<Registration> items)
+        {
+            var service = Fmt(serviceType);
+            sb.AppendLine($"{Indent}services.AddSingleton<global::System.Collections.Generic.IEnumerable<global::Airflow.MSDI.AutoRegister.RegisterItemInfo<{service}>>>(new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<{service}>[]");
+            sb.AppendLine($"{Indent}{{");
+            foreach (var r in items)
+            {
+                sb.AppendLine($"{Indent}    new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<{service}>({KeyLiteral(r.Key)}, typeof({Fmt(r.ImplDisplay)}), {LifetimeLiteral(r.Lifetime)}, {OrderLiteral(r.Order)}),");
+            }
+            sb.AppendLine($"{Indent}}});");
+        }
+
+        private static void AppendCollection(StringBuilder sb, INamedTypeSymbol serviceType, List<Registration> items)
+        {
+            var service = Fmt(serviceType);
+            sb.AppendLine($"{Indent}services.AddTransient<global::System.Collections.Generic.IEnumerable<{service}>>(sp => new {service}[]");
+            sb.AppendLine($"{Indent}{{");
+            foreach (var r in items)
+            {
+                sb.AppendLine($"{Indent}    sp.GetRequiredKeyedService<{Fmt(r.InstanceType)}>({r.Group.AnchorKey}),");
+            }
+            sb.AppendLine($"{Indent}}});");
+        }
+
+        private static string LifetimeMethod(int lifetime) => lifetime switch
+        {
+            0 => "AddSingleton",
+            1 => "AddScoped",
+            _ => "AddTransient",
+        };
+
+        private static string KeyedMethod(string method) => method switch
+        {
+            "AddSingleton" => "AddKeyedSingleton",
+            "AddScoped" => "AddKeyedScoped",
+            "AddTransient" => "AddKeyedTransient",
+            _ => method,
+        };
+
+        private static string LifetimeLiteral(int lifetime) => lifetime switch
+        {
+            0 => "global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Singleton",
+            1 => "global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Scoped",
+            _ => "global::Microsoft.Extensions.DependencyInjection.ServiceLifetime.Transient",
+        };
+
+        private static string KeyLiteral(string? key) =>
+            key is null ? "null" : SymbolDisplay.FormatLiteral(key, quote: true);
+
+        private static string OrderLiteral(double order) =>
+            order.ToString("R", CultureInfo.InvariantCulture);
 
         private IEnumerable<INamedTypeSymbol> AllTypes(INamespaceSymbol ns)
         {
@@ -965,7 +1202,7 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
             0 => "Singleton",
             1 => "Scoped",
             2 => "Transient",
-            _ => lifetime.ToString(),
+            _ => lifetime.ToString(CultureInfo.InvariantCulture),
         };
 
         private static Location? LocationOf(ISymbol symbol) => symbol.Locations.FirstOrDefault();
@@ -984,17 +1221,17 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
         }
     }
 
-    private sealed class TypePairComparer : IEqualityComparer<(ITypeSymbol Service, ITypeSymbol Impl)>
+    private sealed class ServiceKeyComparer : IEqualityComparer<(INamedTypeSymbol Service, string? Key)>
     {
-        public static readonly TypePairComparer Instance = new();
+        public static readonly ServiceKeyComparer Instance = new();
 
-        public bool Equals((ITypeSymbol Service, ITypeSymbol Impl) x, (ITypeSymbol Service, ITypeSymbol Impl) y) =>
+        public bool Equals((INamedTypeSymbol Service, string? Key) x, (INamedTypeSymbol Service, string? Key) y) =>
             SymbolEqualityComparer.Default.Equals(x.Service, y.Service) &&
-            SymbolEqualityComparer.Default.Equals(x.Impl, y.Impl);
+            string.Equals(x.Key, y.Key, StringComparison.Ordinal);
 
-        public int GetHashCode((ITypeSymbol Service, ITypeSymbol Impl) obj) =>
+        public int GetHashCode((INamedTypeSymbol Service, string? Key) obj) =>
             SymbolEqualityComparer.Default.GetHashCode(obj.Service) * 397 ^
-            SymbolEqualityComparer.Default.GetHashCode(obj.Impl);
+            (obj.Key is null ? 0 : StringComparer.Ordinal.GetHashCode(obj.Key));
     }
 
     private sealed class RegistrationOptionsData
