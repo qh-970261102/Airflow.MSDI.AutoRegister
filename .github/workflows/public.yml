@@ -1,0 +1,178 @@
+# ============================================================================
+# 发布 Airflow.MSDI.AutoRegister 到 nuget.org —— 使用「Trusted Publishing」(OIDC)
+#
+# 无需在仓库里保存长期 API Key：GitHub 签发一次性 OIDC token，nuget.org 校验
+# 通过后返回一个有效期 1 小时的临时 API Key，随后用它 dotnet nuget push。
+#
+# 一次性准备（在 nuget.org 网页上做）：
+#   1. 登录 nuget.org → 右上角用户名 → Trusted Publishing → Add new policy
+#        Repository Owner : qh-970261102
+#        Repository       : Airflow.MSDI.AutoRegister
+#        Workflow File    : public.yml          <-- 只填文件名，不带 .github/workflows/
+#        Environment      : 留空（若填了，必须在本文件里也加同名的 environment:）
+#        Scopes           : Push new packages and package versions
+#        Glob Pattern     : airflow.msdi.autoregister（或 *）
+#   2. GitHub 仓库 → Settings → Secrets and variables → Actions
+#        新增 Secret  NUGET_USER = 你的 nuget.org 用户名（个人资料的 profile name，不是邮箱）
+#
+# 发布方式（三种，都会走同一套 build → test → pack → push 流程）：
+#   1) 合并到 main：把 release-2.x 合进 main 并 push，自动发布
+#        —— 前提是 csproj 的 <Version> 已经 bump 过；版本已存在于 nuget.org 时会自动跳过（不会红）
+#   2) 打 tag：git tag v2.0.1 && git push origin v2.0.1
+#        —— tag 必须与 csproj <Version> 一致；版本已存在时直接失败（tag 不允许指向已发布版本）
+#   3) Actions 页面手动 Run workflow，输入 confirm=publish
+# ============================================================================
+
+name: public
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "手动发布需要输入 publish 以确认"
+        required: true
+        default: ""
+
+# 顶层只给读权限，写 OIDC token 的权限只授予 publish 这个 job
+permissions:
+  contents: read
+
+# 同一时间只允许一个发布任务，避免并发推送同名版本
+concurrency:
+  group: nuget-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: pack & push (trusted publishing)
+    runs-on: ubuntu-latest
+
+    # 如果 nuget.org 的 trusted publishing 策略里填了 Environment，
+    # 这里必须加同名 environment，否则 nuget.org 的 claim 校验会失败。
+    # environment: release
+
+    permissions:
+      contents: read
+      id-token: write # 换取 GitHub OIDC token 的必需权限
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Guard manual run
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm != 'publish'
+        run: |
+          echo "::error::手动发布请在 Run workflow 时把 confirm 填成 publish"
+          exit 1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x" # Demo 与测试项目是 net10.0，slnx 也需要新版 SDK
+
+      - name: Restore
+        run: dotnet restore Airflow.MSDI.AutoRegister.slnx
+
+      - name: Build
+        run: dotnet build Airflow.MSDI.AutoRegister.slnx -c Release --no-restore
+
+      - name: Test
+        run: >
+          dotnet test tests/Airflow.MSDI.AutoRegister.Test/Airflow.MSDI.AutoRegister.Test.csproj
+          -c Release --no-build
+
+      - name: Resolve & verify version
+        run: |
+          set -euo pipefail
+          VERSION="$(sed -n 's:.*<Version>\([^<]*\)</Version>.*:\1:p' \
+            src/Airflow.MSDI.AutoRegister/Airflow.MSDI.AutoRegister.csproj | head -n 1)"
+          if [[ -z "$VERSION" ]]; then
+            echo "::error::无法从 csproj 读取 <Version>"
+            exit 1
+          fi
+          echo "csproj version = $VERSION"
+
+          # tag 触发时，tag 必须与 csproj 版本一致（v2.0.0 <-> 2.0.0）
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            TAG="${GITHUB_REF_NAME#v}"
+            if [[ "$TAG" != "$VERSION" ]]; then
+              echo "::error::tag v$TAG 与 csproj <Version>$VERSION</Version> 不一致"
+              exit 1
+            fi
+            echo "tag 与 csproj 版本一致：$VERSION"
+          fi
+
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      # 幂等闸门：版本已在 nuget.org 上就不重复推（main 分支合并时不会因为没 bump 版本而失败）
+      - name: Check nuget.org for existing version
+        id: check
+        run: |
+          set -euo pipefail
+          ID="airflow.msdi.autoregister"
+          URL="https://api.nuget.org/v3-flatcontainer/${ID}/index.json"
+          # -L：api.nuget.org 在部分网络环境会 302 到 CDN（如 nuget.azure.cn），必须跟随
+          CODE="$(curl -sSL -o /tmp/nuget-index.json -w '%{http_code}' "$URL" || echo 000)"
+          EXISTS=false
+          if [[ "$CODE" == "200" ]]; then
+            # jq 在 GitHub 托管的 ubuntu runner 上预装
+            EXISTS="$(jq -r --arg v "$VERSION" '.versions | index($v) != null' /tmp/nuget-index.json)"
+          fi
+          echo "exists=$EXISTS" >> "$GITHUB_OUTPUT"
+          if [[ "$EXISTS" == "true" ]]; then
+            echo "::notice::${ID} ${VERSION} 已存在于 nuget.org，跳过打包与发布"
+          else
+            echo "::notice::${ID} ${VERSION} 尚未发布，继续打包并推送"
+          fi
+
+      # tag 场景语义不同：tag 指向一个已发布版本说明版本号忘了 bump，必须报错
+      - name: Fail if tag points at an already published version
+        if: github.ref_type == 'tag' && steps.check.outputs.exists == 'true'
+        run: |
+          echo "::error::tag ${GITHUB_REF_NAME} 对应版本 ${VERSION} 已存在于 nuget.org，请先 bump csproj <Version> 再重新打 tag"
+          exit 1
+
+      - name: Pack
+        if: steps.check.outputs.exists == 'false'
+        run: >
+          dotnet pack src/Airflow.MSDI.AutoRegister/Airflow.MSDI.AutoRegister.csproj
+          -c Release -o artifacts --no-build -p:ContinuousIntegrationBuild=true
+
+      - name: Inspect package contents
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          set -euo pipefail
+          PKG="artifacts/Airflow.MSDI.AutoRegister.${VERSION}.nupkg"
+          ls -lh "$PKG"
+          # 兜底校验：包体里必须有 analyzer + lib + README，缺一不可
+          unzip -Z1 "$PKG"
+          for entry in "analyzers/dotnet/cs/Airflow.MSDI.AutoRegister.dll" \
+                       "lib/netstandard2.0/Airflow.MSDI.AutoRegister.dll" \
+                       "README.md"; do
+            unzip -Z1 "$PKG" | grep -Fxq "$entry" \
+              || { echo "::error::包内缺少 $entry"; exit 1; }
+          done
+
+      - name: NuGet login (OIDC -> 临时 API Key)
+        if: steps.check.outputs.exists == 'false'
+        id: login
+        uses: NuGet/login@v1
+        with:
+          # nuget.org 的用户名（profile name），不是邮箱；建议放在 Secret 里
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push to nuget.org
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          set -euo pipefail
+          dotnet nuget push "artifacts/Airflow.MSDI.AutoRegister.${VERSION}.nupkg" \
+            --source https://api.nuget.org/v3/index.json \
+            --api-key "${{ steps.login.outputs.NUGET_API_KEY }}"
+          echo "已发布：https://www.nuget.org/packages/Airflow.MSDI.AutoRegister/${VERSION}"
