@@ -3,9 +3,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-netstandard2.0%20%2B-blueviolet)](src/Airflow.MSDI.AutoRegister)
 
-一个面向 **Microsoft.Extensions.DependencyInjection(MSDI)** 的**源生成器**:自动注册你的服务——告别手写 `AddSingleton`/`AddScoped`/`AddTransient` 样板代码,无反射,零运行时开销。
+一个面向 **Microsoft.Extensions.DependencyInjection(MSDI)** 的**源生成器**:编译期自动注册服务——支持 keyed 服务、泛型注册特性、注册元数据与实现集合,**无反射,零运行时开销**。
 
-> English docs: [README.md](README.md)
+> English docs: [README.md](../README.md) · **用 AI 助手写代码?** 见 [AI-QUICKSTART.md](./AI-QUICKSTART.md)(可直接喂给 LLM 的速查指南)。
 
 ---
 
@@ -15,18 +15,24 @@
 
 - ✅ 零运行时反射 —— 所有注册都是直接生成的普通 C# 代码
 - ✅ 对 AOT / trimming 友好
-- ✅ IDE 体验好,完全类型安全
-- ✅ 只依赖 **MSDI 1.0 API 面**(`Microsoft.Extensions.DependencyInjection.Abstractions` 1.0.0)
+- ✅ keyed 与非 keyed 服务统一建模
+- ✅ 自动生成**注册元数据**(`RegisterItemInfo<T>`)与**实现集合**(`IEnumerable<T>`,同时包含 keyed 与非 keyed)
+- ✅ 只依赖 **MSDI 8.0 API 面**(`Microsoft.Extensions.DependencyInjection.Abstractions` 8.0.0)
 
 ## 特性
 
 - `[SingletonService]`、`[ScopedService]`、`[TransientService]` —— 三个内置注册特性
-- 支持按类自身注册、按接口注册、或两者同时注册——**一个特性 = 一条注册**
-- 同一类上多个特性:所有单例注册通过工厂**指向同一实例**
-- `Order` 支持:多个实现竞争同一服务类型时,**Order 最大者胜出**(最后注册);未指定 Order 则**按类型名排序**
-- **工厂方法注册**:在方法上标注特性,将其返回值注册为服务
+- **泛型特性**:`[SingletonService<TargetType>]`、`[ScopedService<TargetType>]`、`[TransientService<TargetType>]`
+- 旧的 `typeof(...)` 写法保留,可与泛型写法混用:`[SingletonService(typeof(IFoo))]`
+- **keyed 服务**:`[SingletonService(Key = "primary")]` → `AddKeyedSingleton<T>("primary")`
+- **同一实现、同一生命周期共享一份实例**:跨接口、跨 key 都指向同一实例
+- `Order` 控制注册顺序(以及集合顺序);同一 targettype + key 下**后注册者胜出**
+- **工厂方法注册**:在方法上标注特性,将其返回值注册为服务(支持 keyed 工厂)
+- **注册元数据**:`IEnumerable<RegisterItemInfo<T>>` 列出每条注册(key、实现、生命周期、Order)
+- **实现集合**:`IEnumerable<T>` 同时包含 keyed 与非 keyed 实现(MSDI 原生枚举只能看到非 keyed)
+- **元数据便捷扩展**:`GetRegisterItems<T>()`、`FindRegisterItem<T>(key)`、`GetRegisterMap<T>()`、`ToKeyValuePairs()`,不用手写遍历样板
 - 可扩展:继承 `BaseServiceAttribute` 并配合 `[RegistrationOptions]` 描述元数据,即可自定义特性
-- `[AutoRegister]` 打在 `partial` 方法上触发代码生成;多个 `[AutoRegister]` 方法各自生成独立实现
+- `[AutoRegister]` 打在 `partial` 方法上触发代码生成(每个程序集一个)
 
 ## 快速开始
 
@@ -36,7 +42,7 @@
 dotnet add package Airflow.MSDI.AutoRegister
 ```
 
-### 2. 标注服务
+### 2. 给服务加特性
 
 ```csharp
 [SingletonService]
@@ -48,15 +54,25 @@ class ServiceB { }
 [TransientService]
 class ServiceC { }
 
+// 接口注册(旧 typeof 写法)
 [SingletonService(typeof(InterfaceD))]
 class ServiceD : InterfaceD { }
 
-// 自身注册 + 接口注册共享同一个单例实例
+// 自身 + 接口:共享同一单例
 [SingletonService]
 [SingletonService(typeof(InterfaceE))]
 class ServiceE : InterfaceE { }
 
-// 多个类型注册同一服务类型时,Order 决定谁胜出
+// 泛型特性写法(C# 11+)
+[SingletonService<IConnector>(Key = "primary")]
+class SqlConnector : IConnector { }
+
+// keyed 自身 + keyed 接口(同 key → 同一实例)
+[SingletonService(Key = "primary")]
+[SingletonService(typeof(IConnector), Key = "primary")]
+class PrimaryConnector : IConnector { }
+
+// 多个实现都不带 key:Order 决定胜出者,集合仍能列出全部
 [SingletonService(typeof(InterfaceF), 2)]
 class ServiceF : InterfaceF { }
 
@@ -66,18 +82,15 @@ class ServiceG : InterfaceF { }
 // 工厂方法注册
 class ServiceH
 {
-    private readonly InterfaceF _serviceG;
-    public ServiceH(InterfaceF serviceG) => _serviceG = serviceG;
-
     [SingletonService]
-    public ServiceI GetServiceI() => new ServiceI(_serviceG);
+    public ServiceI GetServiceI() => new();
 
     [ScopedService]
-    public ServiceJ GetServiceJ(IServiceProvider sp) => new ServiceJ(_serviceG);
+    public ServiceJ GetServiceJ(IServiceProvider sp) => new();
 }
 ```
 
-### 3. 生成注册
+### 3. 声明注册入口
 
 ```csharp
 internal static partial class Register
@@ -98,35 +111,63 @@ internal static partial class Register
 ```csharp
 var services = new ServiceCollection();
 services.AddServices();
+var provider = services.BuildServiceProvider();
+
+var a = provider.GetRequiredService<ServiceA>();
+var primary = provider.GetRequiredKeyedService<IConnector>("primary");
 ```
 
-生成器会填充 `AddServicesFromCurrentAssembly` 的方法体,大致等价于:
+生成器会补全 `AddServicesFromCurrentAssembly` 的方法体。**每个(实现, 生命周期)组合**都会得到一个内部 `object` key(锚点),每条特性注册都是指向该锚点的别名:
 
 ```csharp
-services.AddSingleton<ServiceA>();
-services.AddScoped<ServiceB>();
-services.AddTransient<ServiceC>();
-services.AddSingleton<InterfaceD, ServiceD>();
-services.AddSingleton<ServiceE>();
-services.AddSingleton<InterfaceE>(sp => sp.GetRequiredService<ServiceE>());
-services.AddSingleton<InterfaceF, ServiceG>();   // order 1 先注册
-services.AddSingleton<InterfaceF, ServiceF>();   // order 2 后注册 → 胜出
-services.AddSingleton<ServiceH>();               // 工厂方法拥有类自动注册为单例
-services.AddSingleton<ServiceI>(sp => sp.GetRequiredService<ServiceH>().GetServiceI());
-services.AddScoped<ServiceJ>(sp => sp.GetRequiredService<ServiceH>().GetServiceJ(sp));
+// 锚点:每个 (实现, 生命周期) 一个
+object __key1 = new object();
+services.AddKeyedSingleton<ServiceA>(__key1);
+object __key2 = new object();
+services.AddKeyedScoped<ServiceB>(__key2);
+object __key3 = new object();
+services.AddKeyedTransient<ServiceC>(__key3);
+object __key4 = new object();
+services.AddKeyedSingleton<ServiceD>(__key4);
+// ... 其余实现各有一个锚点(ServiceE、ServiceF、ServiceG ...)
+
+// 别名:每条特性注册一条,全部指回自己的锚点
+services.AddSingleton<ServiceA>(sp => sp.GetRequiredKeyedService<ServiceA>(__key1));
+services.AddScoped<ServiceB>(sp => sp.GetRequiredKeyedService<ServiceB>(__key2));
+services.AddTransient<ServiceC>(sp => sp.GetRequiredKeyedService<ServiceC>(__key3));
+services.AddSingleton<InterfaceD>(sp => sp.GetRequiredKeyedService<ServiceD>(__key4));
+services.AddSingleton<InterfaceE>(sp => sp.GetRequiredKeyedService<ServiceE>(__key5));
+services.AddKeyedSingleton<IConnector>("primary", (sp, _) => sp.GetRequiredKeyedService<PrimaryConnector>(__key6));
+services.AddSingleton<InterfaceF>(sp => sp.GetRequiredKeyedService<ServiceG>(__key7));   // order 1
+services.AddSingleton<InterfaceF>(sp => sp.GetRequiredKeyedService<ServiceF>(__key8));   // order 2 → 胜出
+
+// 工厂方法:拥有类是非 keyed 普通单例,产出的值走锚点
+services.AddSingleton<ServiceH>();
+services.AddKeyedSingleton<ServiceI>(__key9, (sp, _) => sp.GetRequiredService<ServiceH>().GetServiceI());
+services.AddSingleton<ServiceI>(sp => sp.GetRequiredKeyedService<ServiceI>(__key9));
+
+// 注册元数据 + 实现集合,每个服务类型一组
+services.AddSingleton<IEnumerable<RegisterItemInfo<InterfaceD>>>(new RegisterItemInfo<InterfaceD>[]
+{
+    new(null, typeof(ServiceD), ServiceLifetime.Singleton, 0),
+});
+services.AddTransient<IEnumerable<InterfaceD>>(sp => new InterfaceD[]
+{
+    sp.GetRequiredKeyedService<ServiceD>(__key4),
+});
 ```
+
+输出是确定性的;想看真实结果可以打开 Demo 的 `Generated/` 目录,或开启 `EmitCompilerGeneratedFiles`。
 
 ### 5. 查看生成的代码
 
-默认情况下,生成代码**并不落盘**,只存在于编译内存中。如果你想看到生成之后的文件,有两条路:
+默认生成的代码**不会落盘**——只在编译期存在于内存。想查看有两种方式:
 
-**方式一:在 IDE 里直接看(无需落盘)**
+**方式 A —— 在 IDE 里看(不落盘):**
 
-在解决方案资源管理器中展开 **依赖(Dependencies) → 分析器(Analyzers) → Airflow.MSDI.AutoRegister.AutoRegisterGenerator**,双击 `AutoRegister.Register.AddServicesFromCurrentAssembly.g.cs` 即可查看。
+在解决方案资源管理器里展开 **Dependencies → Analyzers → Airflow.MSDI.AutoRegister.AutoRegisterGenerator**,双击 `AutoRegister.Register.AddServicesFromCurrentAssembly.g.cs`。
 
-**方式二:持久落盘,每次编译自动刷新为最新**
-
-在项目的 `.csproj` 里加上:
+**方式 B —— 落盘,每次构建全量刷新:**
 
 ```xml
 <PropertyGroup>
@@ -135,124 +176,244 @@ services.AddScoped<ServiceJ>(sp => sp.GetRequiredService<ServiceH>().GetServiceJ
 </PropertyGroup>
 
 <ItemGroup>
-  <!-- 仅供查看/参考,不参与编译(生成器已内存注入,再编译会重复定义) -->
+  <!-- 仅供查看/参考,不参与编译(生成器已内存注入;再编译会重复定义) -->
   <Compile Remove="Generated/**/*.cs" />
   <None Include="Generated/**/*.cs" Visible="false" />
 </ItemGroup>
 ```
 
-- 只要生成器运行(即发生真正编译),`Generated/` 下的 `.g.cs` 就会被**整份重写**,内容始终与本次编译一致。
-- 该文件是**只读参考产物**,直接改它不影响编译结果。
-- `<Compile Remove>` 这一行不能删:否则落盘文件会与内存注入的那份被重复编译,报"重复定义"错误。
-- 哪个项目想看就在哪个项目里配;生成器项目本身无需任何配置。
+- 每次生成器运行(即每次真实编译)都会**全量重写** `Generated/` 下的 `.g.cs`,内容始终与当前构建一致;
+- 该文件是**只读参考**,改动它不影响编译;
+- 保留 `<Compile Remove>` 那一行:否则磁盘上的文件会与内存注入的版本重复编译,导致重复定义错误。
 
 ## 工作原理
 
-### 类注册
+### 注册方式
 
-| 特性用法 | 生成的代码 |
+每条特性注册都是**一条别名**,统一指向其(实现, 生命周期)的锚点:
+
+| 特性写法 | 生成的别名 |
 |---|---|
-| 类 `C` 上 `[SingletonService]` | `services.AddSingleton<C>();` |
-| `C : I` 上 `[SingletonService(typeof(I))]` | `services.AddSingleton<I, C>();` |
-| `C : I` 上 `[SingletonService]` + `[SingletonService(typeof(I))]` | `services.AddSingleton<C>();` + `services.AddSingleton<I>(sp => sp.GetRequiredService<C>());` |
+| `[SingletonService]` 打在 `C` 上 | `AddSingleton<C>(sp => sp.GetRequiredKeyedService<C>(anchor))` |
+| `[SingletonService(typeof(I))]` 打在 `C : I` 上 | `AddSingleton<I>(sp => sp.GetRequiredKeyedService<C>(anchor))` |
+| `[SingletonService<I>]` 打在 `C : I` 上 | `AddSingleton<I>(sp => sp.GetRequiredKeyedService<C>(anchor))` |
+| `[SingletonService(Key = "k")]` 打在 `C` 上 | `AddKeyedSingleton<C>("k", (sp, _) => sp.GetRequiredKeyedService<C>(anchor))` |
+| `[SingletonService(typeof(I), Key = "k")]` 打在 `C : I` 上 | `AddKeyedSingleton<I>("k", (sp, _) => sp.GetRequiredKeyedService<C>(anchor))` |
+| `[SingletonService]` + `[SingletonService(typeof(I))]` 打在 `C : I` 上 | 两条别名指向**同一个**锚点 → 同一实例 |
 
-最后一行是**同实例规则**:当类既注册自身又注册接口时,接口解析指向类的注册,因此 `I` 与 `C` 解析到完全相同的实例。`Scoped` 与 `Transient` 同理——在同一个 scope 内,`I` 与 `C` 是同一个 scoped 实例。
+工厂方法的拥有类还会额外生成 `AddSingleton<Owner>()`(非 keyed,每类一次)。
 
-**闭合泛型服务类型按原样注册:**
+闭合泛型服务类型原样支持(`[SingletonService<IGenericService<string>>]`)。泛型类本身不能注册(`AMAR2003`),请先用具体子类闭合类型参数("多包一层")。
 
-| 特性用法 | 生成的代码 |
-|---|---|
-| `C : I<TA>` 上 `[SingletonService(typeof(I<TA>))]` | `services.AddSingleton<I<TA>, C>();` |
-| `C : I<TA>` 上 `[SingletonService]` + `[SingletonService(typeof(I<TA>))]` | `services.AddSingleton<C>();` + `services.AddSingleton<I<TA>>(sp => sp.GetRequiredService<C>());` |
+### 实例共享(2.0 模型)
 
-类型实参原样填入。开放/未绑定泛型(`typeof(I<>)`)与开放构造泛型会报错拦截。**泛型类本身不能注册**(如 `class G<T> : I<T>` 会报错);先用具体类闭合类型参数:`class StringG : G<string>`,再注册 `StringG` 即可——"多包一层"而已。
+**同一实现类型、同一生命周期只有一份实例**——无论通过哪个接口或哪个 key 解析,都指向同一实例:
 
-### Order 排序
+```csharp
+[SingletonService(Key = "primary")]
+[SingletonService(typeof(IConnector), Key = "primary")]
+public class PrimaryConnector : IConnector { }
 
-注册按 `(Order, 实现类型名)` 排序:
+var a = provider.GetRequiredKeyedService<PrimaryConnector>("primary");
+var b = provider.GetRequiredKeyedService<IConnector>("primary");
+ReferenceEquals(a, b); // true
+```
 
-- Order 越大注册越**靠后**,而 MSDI 中同一服务类型**后注册者胜出**,所以 Order 相当于优先级。
-- 未指定 Order(默认 `0`)时,按实现类型名排序——说明使用者并不关心谁胜出。
+两条注册都是同一个锚点的别名,所以"自身 + 接口、多接口、多 key、keyed + 非 keyed"任意组合都能共享同一个实例。
+
+不同生命周期各自一份(`[SingletonService]` + `[ScopedService<IFoo>]` → 类本身一个单例,接口每个 scope 一份)。
+
+### key
+
+- `Key` 是**字符串**;不写或写 `null` 表示非 keyed 注册;
+- **命名 key 在同一 targettype 下必须唯一**(`AMAR2009`):不同实现不能注册同一服务类型的同一 key;
+- **无 key 的注册可以重复**——这就是 1.x 的"多实现 + Order 决定胜出者"模式;
+- 生成代码会用内部 `object` key("锚点")保存实现实例,让 keyed / 非 keyed 别名共享同一实例。
+
+### Order
+
+注册按 `(Order, 实现类型名, key)` 排序:
+
+- 同一 targettype + key 下,**后注册者胜出**——`Order` 越大越后注册,即优先级越高;
+- `Order` 同时决定元数据与实现集合里的排列顺序;
+- 未指定 `Order` 时为 `0`,此时按实现类型名排序。
 
 ### 工厂方法注册
 
-- 拥有类自动注册为**单例**(每个类只注册一次)。
-- 方法必须是普通类上的 `public` 实例方法,参数为**无参或仅一个 `IServiceProvider`**。
-- 方法返回值类型即服务类型。生成的注册**不带显式类型参数**——服务类型由工厂 lambda 的返回值自动推断(lambda 自然类型推断),因此**闭合泛型按原样注册**(`List<TypeA>` 直接可用,无需重复写类型);开放/未绑定泛型与数组会被报错拦截:
+- 拥有类自动注册为**非 keyed 单例**(每类一次);
+- 方法必须是普通类上的 `public` 实例方法,参数为**无参**或**仅一个 `IServiceProvider`**;
+- 返回类型即服务类型;可用泛型目标或 `typeof(...)` 覆盖(返回类型必须可隐式转换到该类型);
+- 单例工厂不允许带 `IServiceProvider`(`AMAR1010`);scoped/transient 工厂可以;
+- 返回类型必须是引用类型;值类型/数组/开放泛型会被拒绝(`AMAR1007`)。
+
+### 注册元数据与实现集合
+
+生成器会为**每个服务类型**额外生成两条注册:
 
 ```csharp
-// 无参
-services.AddSingleton(sp => sp.GetRequiredService<ServiceH>().GetServiceI());
-// 带 IServiceProvider
-services.AddScoped(sp => sp.GetRequiredService<ServiceH>().GetServiceJ(sp));
-// 闭合泛型返回类型,同样自动推断
-services.AddSingleton(sp => sp.GetRequiredService<ServiceH>().GetList()); // 服务类型 = List<TypeA>
+// 1) 元数据:逐注册一条(key、实现、生命周期、Order)
+services.AddSingleton<IEnumerable<RegisterItemInfo<IConnector>>>(new RegisterItemInfo<IConnector>[]
+{
+    new("primary", typeof(SqlConnector), ServiceLifetime.Singleton, 0),
+    new("replica", typeof(ReadOnlyConnector), ServiceLifetime.Singleton, 0),
+});
+
+// 2) 实例集合:keyed + 非 keyed 实现放在一个集合里
+services.AddTransient<IEnumerable<IConnector>>(sp => new IConnector[]
+{
+    sp.GetRequiredKeyedService<SqlConnector>(__key1),
+    sp.GetRequiredKeyedService<ReadOnlyConnector>(__key2),
+});
 ```
 
-> 非法形态(static 方法、非 public、参数不合规、拥有类非普通类等)在 **v1.0 会被静默跳过**;诊断能力自 **v1.1** 起由生成器报告(`AMAR` 前缀:Error 阻断编译、Warning 仅提示)。
+为什么需要它:MSDI 的 keyed 与非 keyed 走两套解析路径,原生 `IEnumerable<T>` 永远拿不到 keyed 注册。生成的集合正是为了消除这个不一致:
+
+```csharp
+provider.GetServices<IConnector>();                                        // 全部实现(含 keyed)
+provider.GetRequiredService<IEnumerable<RegisterItemInfo<IConnector>>>();  // 注册清单
+```
+
+> 生成的 `IEnumerable<T>` 会**有意覆盖** MSDI 原生枚举。对同一个服务类型手动 `services.AddSingleton<T>()` 的注册不会进入集合——请统一改用特性注册。
+
+### 读取注册清单(便捷扩展)
+
+基本不用再手写 `GetRequiredService<IEnumerable<RegisterItemInfo<T>>>()`:
+
+```csharp
+// 某个服务类型的全部注册(没有注册时返回空列表)
+IReadOnlyList<RegisterItemInfo<IConnector>> items = provider.GetRegisterItems<IConnector>();
+
+// 按 key 取一条注册(找不到返回 null;null key 表示无 key 的那条)
+RegisterItemInfo<IConnector>? primary = provider.FindRegisterItem<IConnector>("primary");
+
+// key → 实现类型
+IReadOnlyDictionary<string, Type> map = provider.GetRegisterMap<IConnector>();
+
+// 遍历 key → 实现(无 key 的注册 key 为 null)
+foreach (KeyValuePair<string?, Type> pair in items.ToKeyValuePairs())
+    Console.WriteLine($"{pair.Key ?? "<none>"} -> {pair.Value.Name}");
+
+// 手里已有清单时也可以直接查
+var item = items.FindByKey("primary");
+```
 
 ### 自定义特性
 
-任何 `BaseServiceAttribute` 的子类都可用。用 `[RegistrationOptions]` 描述构造函数布局,让生成器知道哪个参数是生命周期、哪个是服务类型、哪个是 Order:
+继承 `BaseServiceAttribute` 即可。用 `[RegistrationOptions]` 描述构造函数布局,生成器据此读取生命周期、服务类型与 Order:
 
 ```csharp
 [RegistrationOptions(
-    LifetimeIndex = -1,                        // 构造函数无生命周期参数 → 用 DefaultLifetime
+    LifetimeIndex = -1,                        // 没有生命周期构造参数 → 用 DefaultLifetime
     ServiceTypeIndex = 0,                      // 构造参数 #0 是服务类型
     OrderIndex = 1,                            // 构造参数 #1 是 Order
-    DefaultLifetime = ServiceLifetime.Transient,
-    DefaultServiceType = null,
-    DefaultOrder = 0)]
+    DefaultLifetime = ServiceLifetime.Transient)]
 public sealed class CustomServiceAttribute : BaseServiceAttribute
 {
     public CustomServiceAttribute(Type? serviceType = null, double order = 0)
         : base(ServiceLifetime.Transient, serviceType, order) { }
 }
 
-[CustomService(typeof(InterfaceX))]
+[CustomService(typeof(InterfaceX), Key = "v2")]   // Key/Order 是继承来的可写属性
 public class ServiceX : InterfaceX { }
-// → services.AddTransient<InterfaceX, ServiceX>();
+// → services.AddKeyedTransient<InterfaceX, ServiceX>("v2");
 ```
 
-## 错误诊断
+`[RegistrationOptions]` 还可以为"没写进构造参数的东西"提供**默认值**——`DefaultLifetime`、`DefaultServiceType`、`DefaultOrder`。Demo 里用 `ViewAttribute` / `ViewModelAttribute` 演示了这一点:`[View]` 默认注册为 `IView`(Transient),`[ViewModel]` 默认注册为 `IViewModel`,显式传入目标类型则覆盖默认值:
 
-自 **v1.1** 起,生成器会对非法用法报告 `AMAR` 前缀的诊断——**Error 阻断编译,Warning 仅提示**。消息**支持本地化**:默认英文,简体中文通过卫星资源提供,语言跟随 IDE/编译器的界面语言。
+```csharp
+[RegistrationOptions(
+    LifetimeIndex = -1,
+    ServiceTypeIndex = 0,                        // 构造参数 #0 = 目标类型
+    OrderIndex = 1,                              // 构造参数 #1 = Order
+    DefaultLifetime = ServiceLifetime.Transient,
+    DefaultServiceType = typeof(IView),          // [View] 不写参数时 → IView
+    DefaultOrder = 0)]
+public sealed class ViewAttribute : BaseServiceAttribute
+{
+    public ViewAttribute(Type? serviceType = null, double order = 0)
+        : base(ServiceLifetime.Transient, serviceType, order) { }
+}
 
-| Rule ID | Severity | 说明 |
+[View]                                           // → IView(Transient,Order 0)
+public class MainView : IView { }
+
+[View(Order = 1)]                                // → IView,排在 MainView 之后
+public class SettingsView : IView { }
+
+[View(typeof(ISpecialView))]                     // 显式目标覆盖默认值
+public class SpecialView : IView, ISpecialView { }
+
+[ViewModel(Key = "settings")]                    // → keyed IViewModel 注册
+public class SettingsViewModel : IViewModel { }
+```
+
+完整示例在 `simple/Airflow.MSDI.AutoRegister.Demo/Attributes/`,运行 Demo 可以看到实际输出。
+
+带 **1 个类型参数**的泛型特性会被当作"目标类型"处理(与内置泛型特性同一约定)。
+
+## 诊断
+
+生成器输出 `AMAR` 前缀的诊断——**Error 会阻止编译并跳过该条注册**,**Warning 只是提示**。消息支持本地化:默认英文,`zh-Hans` 走卫星资源。
+
+| 规则 | 级别 | 说明 |
 |---|---|---|
-| AMAR1001 | Error | 工厂方法拥有类必须是普通类 |
-| AMAR1002 | Error | 拥有工厂方法的类不能再添加注册特性 |
+| AMAR1001 | Error | 拥有工厂方法的类必须是普通类 |
+| AMAR1002 | Error | 拥有工厂方法的类不能再带注册特性 |
 | AMAR1003 | Error | 工厂方法不能是 static |
 | AMAR1004 | Error | 工厂方法必须 public |
 | AMAR1005 | Error | 工厂方法不能是泛型方法 |
 | AMAR1006 | Error | 工厂方法不能返回 void |
-| AMAR1007 | Error | 工厂方法返回类型必须是可解析的具名类型 |
+| AMAR1007 | Error | 工厂方法返回类型必须是引用类型 |
 | AMAR1008 | Error | 工厂方法参数个数不合法 |
-| AMAR1009 | Error | 工厂方法单个参数必须是 IServiceProvider |
-| AMAR1010 | Error | 单例工厂方法不允许 IServiceProvider 参数 |
+| AMAR1009 | Error | 单参数必须是 IServiceProvider |
+| AMAR1010 | Error | 单例工厂不能带 IServiceProvider 参数 |
 | AMAR2001 | Error | 注册特性作用于不支持的目标 |
 | AMAR2002 | Error | 服务类型必须是接口或类 |
-| AMAR2003 | Error | 泛型类不支持注册 |
-| AMAR2005 | Warning | 同一 (ServiceType, ImplType) 重复注册 |
-| AMAR2006 | Warning | 自身注册与接口注册生命周期不一致 |
+| AMAR2003 | Error | 泛型类不能注册 |
+| AMAR2005 | Warning | 完全重复的注册(同服务类型 + key + 实现) |
+| AMAR2007 | Error | 实现类型与服务类型不兼容 |
+| AMAR2008 | Error | 实现类型不可实例化(abstract/static) |
+| AMAR2009 | Error | 同一 targettype 下命名 key 重复 |
 | AMAR3001 | Error | [AutoRegister] 方法必须声明为 partial |
-| AMAR3002 | Error | [AutoRegister] 方法所在类必须是 partial |
+| AMAR3002 | Error | [AutoRegister] 方法所在类必须 partial |
 | AMAR3003 | Error | [AutoRegister] 方法不能有手写实现 |
 | AMAR3004 | Error | [AutoRegister] 方法必须是 static |
 | AMAR3005 | Error | [AutoRegister] 方法签名必须是 (IServiceCollection services) |
 | AMAR3006 | Warning | 程序集内没有可注册的服务 |
-| AMAR3007 | Error | 同一程序集只允许一个 [AutoRegister] 方法 |
+| AMAR3007 | Error | 每个程序集只允许一个 [AutoRegister] 方法 |
 | AMAR4001 | Error | 缺少 [RegistrationOptions] |
 | AMAR4002 | Error | [RegistrationOptions] 索引超出构造函数参数个数 |
-| AMAR4003 | Error | [RegistrationOptions] 索引对应参数类型不符 |
+| AMAR4003 | Error | [RegistrationOptions] 索引指向的参数类型不对 |
 | AMAR4004 | Error | 生命周期枚举值非法 |
 | AMAR4005 | Warning | 继承链上存在多个 [RegistrationOptions] |
+| AMAR4006 | Error | 泛型注册特性的类型参数超过 1 个 |
+| AMAR4007 | Error | 注册特性中服务类型冲突 |
 
 ## 兼容性
 
-- 包仅依赖 **`Microsoft.Extensions.DependencyInjection.Abstractions` 1.0.0**(最古老的 MSDI API 面),因此生成的代码可配合任意现代 MSDI 容器编译运行。
-- 生成器目标 `netstandard2.0`,运行于 .NET SDK 内置 Roslyn(`[AutoRegister]` 需要 C# 9+ 的带可访问性 partial 方法)。
+- 依赖 **`Microsoft.Extensions.DependencyInjection.Abstractions` 8.0.0**(keyed 服务的最低版本);
+- **keyed 注册在运行期需要 MSDI 8.0+(.NET 8+)**;非 keyed 注册可在旧容器上继续工作,但包依赖已被抬高;
+- 生成器目标 `netstandard2.0`,运行于 .NET SDK 自带的 Roslyn;
+- 生成的代码需要 **C# 9+**;**泛型特性语法需要 C# 11+**(旧 `typeof(...)` 写法 C# 9+ 即可)。
 
-## License
+## 从 1.x 迁移
 
-[MIT](LICENSE)
+| 变化 | 影响 |
+|---|---|
+| **同一实现、同一生命周期共享一份实例** | 同一类的多条接口注册现在共用一个实例(1.x 在没有自身注册时是每条一份) |
+| 单条注册也生成锚点 + 别名 | 每个实现多一条 keyed descriptor,行为不变 |
+| `[AutoRegister]` 仍是每个程序集一个 | 不变 |
+| **命名 key 在同一 targettype 下必须唯一**(`AMAR2009`,Error) | 1.x 没有 key;多实现请各给一个 key |
+| 移除 `AMAR2006` | 实例已按生命周期分组,不再存在自身/接口生命周期错位 |
+| 每个服务类型都会生成 `IEnumerable<T>` | 覆盖 MSDI 原生枚举以纳入 keyed 实现;手动注册的同类型服务不在其中 |
+| `Abstractions` 1.0.0 → 8.0.0 | keyed 运行期需要 MSDI 8.0+ |
+| `Key` / `Order` 属性、泛型特性、`RegisterItemInfo<T>` | 新增 API |
+
+## 相关文档
+
+- 英文 README:[README.md](../README.md)
+- AI/LLM 快速上手(可直接粘贴的提示词 + 速查表):[AI-QUICKSTART.md](./AI-QUICKSTART.md)
+
+## 许可
+
+[MIT](../LICENSE)

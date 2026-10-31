@@ -4,7 +4,7 @@ using Microsoft.CodeAnalysis;
 
 namespace Airflow.MSDI.AutoRegister.Test;
 
-/// <summary>逐条验证 1.1 版本的 AMAR 诊断:触发条件、消息内容与"报错即跳过生成"。</summary>
+/// <summary>逐条验证 2.0 版本的 AMAR 诊断:触发条件、消息内容与"报错即跳过生成"。</summary>
 [TestClass]
 public sealed class DiagnosticTests
 {
@@ -76,8 +76,8 @@ public sealed class DiagnosticTests
             """);
 
         AssertHas(diagnostics, "AMAR1001", "ServiceH");
-        Assert.DoesNotContain( "GetServiceI", code,  "非法工厂方法不应生成注册代码");
-        Assert.DoesNotContain( "AddSingleton<global::Demo.ServiceH>", code,  "形态非法的工厂方法不应触发拥有类自动注册");
+        Assert.DoesNotContain("GetServiceI", code, "非法工厂方法不应生成注册代码");
+        Assert.DoesNotContain("global::Demo.ServiceH", code, "形态非法的工厂方法不应触发拥有类自动注册");
     }
 
     [TestMethod]
@@ -97,9 +97,10 @@ public sealed class DiagnosticTests
             """);
 
         AssertHas(diagnostics, "AMAR1002", "ServiceH");
-        // 拥有类自身的特性注册仍然生成,但工厂条目被跳过。
-        StringAssert.Contains(code, "services.AddSingleton<global::Demo.ServiceH>();");
-        Assert.DoesNotContain( "GetServiceI", code,  "AMAR1002 报错后工厂条目应被跳过");
+        // 拥有类自身的特性注册仍然生成(锚点 + 别名),但工厂条目被跳过。
+        StringAssert.Contains(code, "services.AddKeyedSingleton<global::Demo.ServiceH>(__key1);");
+        StringAssert.Contains(code, "services.AddSingleton<global::Demo.ServiceH>(sp => sp.GetRequiredKeyedService<global::Demo.ServiceH>(__key1));");
+        Assert.DoesNotContain("GetServiceI", code, "AMAR1002 报错后工厂条目应被跳过");
     }
 
     [TestMethod]
@@ -192,6 +193,23 @@ public sealed class DiagnosticTests
     }
 
     [TestMethod]
+    public void AMAR1007_ValueTypeReturnType_Reports()
+    {
+        var (_, _, diagnostics) = GeneratorTestHelper.RunGenerator($$"""
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            public class ServiceH
+            {
+                [SingletonService]
+                public int GetInt() => 42;
+            }
+            {{RegisterSnippet}}
+            """);
+
+        AssertHas(diagnostics, "AMAR1007", "GetInt");
+    }
+
+    [TestMethod]
     public void AMAR1008_TwoParameters_Reports()
     {
         var (_, _, diagnostics) = GeneratorTestHelper.RunGenerator($$"""
@@ -247,8 +265,8 @@ public sealed class DiagnosticTests
             """);
 
         AssertHas(diagnostics, "AMAR1010", "GetServiceI");
-        Assert.DoesNotContain( "GetServiceI", code,  "单例工厂带 sp 参数应跳过生成");
-        Assert.DoesNotContain( "AddSingleton<global::Demo.ServiceH>", code,  "工厂条目全部跳过时拥有类不应自动注册");
+        Assert.DoesNotContain("GetServiceI", code, "单例工厂带 sp 参数应跳过生成");
+        Assert.DoesNotContain("global::Demo.ServiceH", code, "工厂条目全部跳过时拥有类不应自动注册");
     }
 
     [TestMethod]
@@ -268,8 +286,9 @@ public sealed class DiagnosticTests
             """);
 
         AssertNotHas(diagnostics, "AMAR1010");
-        // 工厂注册由 lambda 返回值推断服务类型(不带显式类型参数)。
-        StringAssert.Contains(code, "services.AddScoped(sp => sp.GetRequiredService<global::Demo.ServiceH>().GetServiceJ(sp));");
+        // 工厂调用放在锚点里,别名指回锚点
+        StringAssert.Contains(code, "services.AddKeyedScoped<global::Demo.ServiceJ>(__key1, (sp, _) => sp.GetRequiredService<global::Demo.ServiceH>().GetServiceJ(sp));");
+        StringAssert.Contains(code, "services.AddScoped<global::Demo.ServiceJ>(sp => sp.GetRequiredKeyedService<global::Demo.ServiceJ>(__key1));");
         StringAssert.Contains(code, "services.AddSingleton<global::Demo.ServiceH>();");
     }
 
@@ -358,7 +377,8 @@ public sealed class DiagnosticTests
 
         Assert.IsFalse(diagnostics.Any(d => d.Id.StartsWith("AMAR", StringComparison.Ordinal)),
             "闭合泛型注册不应产生任何 AMAR 诊断:\n" + string.Join("\n", diagnostics.Select(d => d.ToString())));
-        StringAssert.Contains(code, "services.AddSingleton<global::Demo.InterfaceA<global::Demo.TypeA>, global::Demo.TypeB>();");
+        StringAssert.Contains(code, "services.AddKeyedSingleton<global::Demo.TypeB>(__key1);");
+        StringAssert.Contains(code, "services.AddSingleton<global::Demo.InterfaceA<global::Demo.TypeA>>(sp => sp.GetRequiredKeyedService<global::Demo.TypeB>(__key1));");
     }
 
     [TestMethod]
@@ -393,20 +413,75 @@ public sealed class DiagnosticTests
     }
 
     [TestMethod]
-    public void AMAR2006_InconsistentLifetimes_ReportsWarning()
+    public void AMAR2007_ImplementationNotConvertible_Reports()
     {
-        var (_, _, diagnostics) = GeneratorTestHelper.RunGenerator($$"""
+        var (code, _, diagnostics) = GeneratorTestHelper.RunGenerator($$"""
             using Microsoft.Extensions.DependencyInjection;
             namespace Demo;
-            [SingletonService]
-            [ScopedService(typeof(InterfaceA))]
-            public class ServiceA : InterfaceA { }
             public interface InterfaceA { }
+            public class Base { }
+            [SingletonService(typeof(InterfaceA))]
+            public class ServiceA : Base { }
             {{RegisterSnippet}}
             """);
 
-        AssertHas(diagnostics, "AMAR2006", "ServiceA", "Singleton", "Scoped");
-        Assert.AreEqual(DiagnosticSeverity.Warning, Find(diagnostics, "AMAR2006")!.Severity);
+        AssertHas(diagnostics, "AMAR2007", "ServiceA", "InterfaceA");
+        Assert.DoesNotContain("global::Demo.ServiceA", code, "不兼容的实现类型应被跳过");
+    }
+
+    [TestMethod]
+    public void AMAR2008_AbstractImplementation_Reports()
+    {
+        var (code, _, diagnostics) = GeneratorTestHelper.RunGenerator($$"""
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            [SingletonService]
+            public abstract class ServiceA { }
+            {{RegisterSnippet}}
+            """);
+
+        AssertHas(diagnostics, "AMAR2008", "ServiceA");
+        Assert.DoesNotContain("global::Demo.ServiceA", code);
+    }
+
+    [TestMethod]
+    public void AMAR2009_DuplicateNamedKey_ReportsError_AndSkipsLater()
+    {
+        var (code, _, diagnostics) = GeneratorTestHelper.RunGenerator($$"""
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            public interface InterfaceA { }
+            [SingletonService(typeof(InterfaceA), Key = "shared")]
+            public class ServiceB : InterfaceA { }
+            [SingletonService(typeof(InterfaceA), Key = "shared")]
+            public class ServiceC : InterfaceA { }
+            {{RegisterSnippet}}
+            """);
+
+        AssertHas(diagnostics, "AMAR2009", "InterfaceA", "\"shared\"");
+        Assert.AreEqual(DiagnosticSeverity.Error, Find(diagnostics, "AMAR2009")!.Severity);
+        StringAssert.Contains(code, "global::Demo.ServiceB");
+        Assert.DoesNotContain("global::Demo.ServiceC", code, "重复命名 key 的后续实现应被跳过");
+    }
+
+    [TestMethod]
+    public void UnkeyedMultiImplementations_AreAllowed_AndAnchored()
+    {
+        var (code, _, diagnostics) = GeneratorTestHelper.RunGenerator($$"""
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            public interface InterfaceA { }
+            [SingletonService(typeof(InterfaceA))]
+            public class ServiceB : InterfaceA { }
+            [SingletonService(typeof(InterfaceA))]
+            public class ServiceC : InterfaceA { }
+            {{RegisterSnippet}}
+            """);
+
+        Assert.IsFalse(diagnostics.Any(d => d.Id.StartsWith("AMAR", StringComparison.Ordinal)),
+            "无 key 的多实现应被允许,不产生 AMAR 诊断:\n" + string.Join("\n", diagnostics.Select(d => d.ToString())));
+        StringAssert.Contains(code, "services.AddKeyedSingleton<global::Demo.ServiceB>(__key1);");
+        StringAssert.Contains(code, "services.AddKeyedSingleton<global::Demo.ServiceC>(__key2);");
     }
 
     // ---- 3. AutoRegister 方法相关 ----
@@ -647,7 +722,8 @@ public sealed class DiagnosticTests
         AssertHas(diagnostics, "AMAR4005", "DerivedAttr");
         Assert.AreEqual(DiagnosticSeverity.Warning, Find(diagnostics, "AMAR4005")!.Severity);
         // 只取最近的 [RegistrationOptions](Scoped) 生成注册。
-        StringAssert.Contains(code, "services.AddScoped<global::Demo.ServiceA>();");
+        StringAssert.Contains(code, "services.AddKeyedScoped<global::Demo.ServiceA>(__key1);");
+        StringAssert.Contains(code, "services.AddScoped<global::Demo.ServiceA>(sp => sp.GetRequiredKeyedService<global::Demo.ServiceA>(__key1));");
     }
 
     [TestMethod]
@@ -691,6 +767,57 @@ public sealed class DiagnosticTests
         {
             CultureInfo.CurrentUICulture = original;
         }
+    }
+
+    [TestMethod]
+    public void AMAR4006_GenericAttributeWithTwoTypeParameters_Reports()
+    {
+        var (code, _, diagnostics) = GeneratorTestHelper.RunGenerator($$"""
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            public interface InterfaceA { }
+            public interface InterfaceB { }
+
+            [RegistrationOptions(DefaultLifetime = ServiceLifetime.Singleton)]
+            public sealed class MyServiceAttribute<T1, T2> : BaseServiceAttribute
+                where T1 : class
+                where T2 : class
+            {
+                public MyServiceAttribute() : base(ServiceLifetime.Singleton, typeof(T1)) { }
+            }
+
+            [MyService<InterfaceA, InterfaceB>]
+            public class ServiceA : InterfaceA { }
+            {{RegisterSnippet}}
+            """);
+
+        AssertHas(diagnostics, "AMAR4006", "MyServiceAttribute", "2");
+        Assert.DoesNotContain("global::Demo.ServiceA", code);
+    }
+
+    [TestMethod]
+    public void AMAR4007_GenericTargetConflictsWithConstructorType_Reports()
+    {
+        var (code, _, diagnostics) = GeneratorTestHelper.RunGenerator($$"""
+            using System;
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            public interface InterfaceA { }
+            public interface InterfaceB { }
+
+            [RegistrationOptions(LifetimeIndex = -1, ServiceTypeIndex = 0, OrderIndex = -1, DefaultLifetime = ServiceLifetime.Singleton)]
+            public sealed class MyServiceAttribute<T1> : BaseServiceAttribute where T1 : class
+            {
+                public MyServiceAttribute(Type? serviceType = null) : base(ServiceLifetime.Singleton, serviceType) { }
+            }
+
+            [MyService<InterfaceA>(typeof(InterfaceB))]
+            public class ServiceA : InterfaceA, InterfaceB { }
+            {{RegisterSnippet}}
+            """);
+
+        AssertHas(diagnostics, "AMAR4007", "InterfaceA", "InterfaceB");
+        Assert.DoesNotContain("global::Demo.ServiceA", code);
     }
 
     // ---- 辅助 ----

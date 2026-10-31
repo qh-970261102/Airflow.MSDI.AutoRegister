@@ -52,7 +52,7 @@
     <value>工厂方法返回类型必须是可解析的具名类型</value>
   </data>
   <data name="AMAR1007_Message" xml:space="preserve">
-    <value>工厂方法 '{0}' 的返回类型必须是可解析的具名类型(闭合泛型如 List&lt;int&gt; 支持,按原样注册);不能是数组、指针或未绑定泛型。</value>
+    <value>工厂方法 '{0}' 的返回类型必须是引用类型(类或接口);闭合泛型(如 List&lt;int&gt;)会原样注册,值类型、数组、指针与开放泛型不支持。</value>
   </data>
   <data name="AMAR1008_Title" xml:space="preserve">
     <value>工厂方法参数个数不合法</value>
@@ -94,13 +94,7 @@
     <value>重复注册</value>
   </data>
   <data name="AMAR2005_Message" xml:space="preserve">
-    <value>服务类型 '{0}' 与实现类型 '{1}' 存在重复注册,后注册者胜出,请确认是否有意。</value>
-  </data>
-  <data name="AMAR2006_Title" xml:space="preserve">
-    <value>自身注册与接口注册生命周期不一致</value>
-  </data>
-  <data name="AMAR2006_Message" xml:space="preserve">
-    <value>类 '{0}' 的自身注册(生命周期 {1})与接口注册(生命周期 {2})生命周期不一致,同实例规则下建议保持一致。</value>
+    <value>服务 '{0}' 的实现 '{1}' 重复注册(key: {2});后注册者胜出,请确认是否有意。</value>
   </data>
   <data name="AMAR3001_Title" xml:space="preserve">
     <value>[AutoRegister] 方法必须声明为 partial</value>
@@ -173,5 +167,35 @@
   </data>
   <data name="AMAR4005_Message" xml:space="preserve">
     <value>特性 '{0}' 的继承链上存在多个 [RegistrationOptions],只取最近的,请移除冗余项。</value>
+  </data>
+  <data name="AMAR2007_Title" xml:space="preserve">
+    <value>实现类型与服务类型不兼容</value>
+  </data>
+  <data name="AMAR2007_Message" xml:space="preserve">
+    <value>实现类型 '{0}' 无法转换为服务类型 '{1}';请检查泛型目标或 typeof(...) 参数。</value>
+  </data>
+  <data name="AMAR2008_Title" xml:space="preserve">
+    <value>实现类型不可实例化</value>
+  </data>
+  <data name="AMAR2008_Message" xml:space="preserve">
+    <value>实现类型 '{0}' 是抽象类或静态类,无法实例化;请移除注册特性或改用具体类型。</value>
+  </data>
+  <data name="AMAR2009_Title" xml:space="preserve">
+    <value>同一 targettype 下 key 重复</value>
+  </data>
+  <data name="AMAR2009_Message" xml:space="preserve">
+    <value>服务类型 '{0}' 下 key {1} 已被实现 '{2}' 使用;同一 targettype 下命名 key 必须唯一。</value>
+  </data>
+  <data name="AMAR4006_Title" xml:space="preserve">
+    <value>泛型注册特性的类型参数过多</value>
+  </data>
+  <data name="AMAR4006_Message" xml:space="preserve">
+    <value>泛型注册特性 '{0}' 有 {1} 个类型参数;只支持一个类型参数(目标类型)。</value>
+  </data>
+  <data name="AMAR4007_Title" xml:space="preserve">
+    <value>注册特性中服务类型冲突</value>
+  </data>
+  <data name="AMAR4007_Message" xml:space="preserve">
+    <value>泛型目标类型 '{0}' 与构造参数服务类型 '{1}' 冲突(特性 '{2}');服务类型只允许在一处指定。</value>
   </data>
 </root>

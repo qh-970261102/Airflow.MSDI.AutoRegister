@@ -19,8 +19,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 运行时容器实现(Demo 用现代版本;生成器本身只依赖 Abstractions 1.0.0) -->
-    <PackageReference Include="Airflow.MSDI.AutoRegister" Version="1.2.0" />
+    <!-- 运行时容器实现(Demo 用现代版本;库本身依赖 Abstractions 8.0.0) -->
+    <ProjectReference Include="..\..\src\Airflow.MSDI.AutoRegister\Airflow.MSDI.AutoRegister.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="true" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
   </ItemGroup>
 
