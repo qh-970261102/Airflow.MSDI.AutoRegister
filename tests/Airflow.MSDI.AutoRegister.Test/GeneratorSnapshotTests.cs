@@ -475,6 +475,167 @@ public sealed class GeneratorSnapshotTests
         StringAssert.Contains(code, $"sp.GetRequiredKeyedService<global::Demo.ServiceF>({anchorF}),");
     }
 
+    // ---- 2.1: Usings + KeyTemplate ----
+
+    [TestMethod]
+    public void Generates_AdditionalUsings_And_KeyTemplate_StaticHelper()
+    {
+        var (code, output, _) = GeneratorTestHelper.RunGenerator("""
+            using System;
+            using Microsoft.Extensions.DependencyInjection;
+
+            namespace Demo.KeyTemplates
+            {
+                public static class ViewKey
+                {
+                    public static string GetViewRegisterKey(Type viewType)
+                    {
+                        var name = viewType.Name;
+                        return name.EndsWith("View", StringComparison.Ordinal)
+                            ? name.Substring(0, name.Length - "View".Length)
+                            : name;
+                    }
+                }
+            }
+
+            namespace Demo
+            {
+                public interface IView { }
+
+                [RegistrationOptions(
+                    LifetimeIndex = -1,
+                    ServiceTypeIndex = 0,
+                    OrderIndex = 1,
+                    DefaultLifetime = ServiceLifetime.Transient,
+                    DefaultServiceType = typeof(IView),
+                    DefaultOrder = 0,
+                    KeyTemplate = "GetViewRegisterKey({Type})")]
+                public sealed class ViewAttribute : BaseServiceAttribute
+                {
+                    public ViewAttribute(Type? serviceType = null, double order = 0)
+                        : base(ServiceLifetime.Transient, serviceType, order) { }
+                }
+
+                [View]
+                public class MainView : IView { }
+
+                [View(Key = null)]
+                public class UnkeyedView : IView { }
+
+                [View(Key = "custom")]
+                public class CustomView : IView { }
+
+                internal static partial class Register
+                {
+                    [AutoRegister(Usings = new[]
+                    {
+                        "static Demo.KeyTemplates.ViewKey",
+                        "static Demo.KeyTemplates.ViewKey",
+                        "ViewKeys = Demo.KeyTemplates.ViewKey",
+                        "Microsoft.Extensions.DependencyInjection",
+                    })]
+                    public static partial void AddServices(IServiceCollection services);
+                }
+            }
+            """);
+
+        StringAssert.Contains(code, "using static Demo.KeyTemplates.ViewKey;");
+        Assert.AreEqual(1, CountOccurrences(code, "using static Demo.KeyTemplates.ViewKey;"),
+            "重复的 using entry 应被去重");
+        Assert.AreEqual(1, CountOccurrences(code, "using Microsoft.Extensions.DependencyInjection;"),
+            "内置 using 不应被用户列表重复输出");
+        StringAssert.Contains(code, "using ViewKeys = Demo.KeyTemplates.ViewKey;");
+        StringAssert.Contains(code, "string __keyValue1 = GetViewRegisterKey(typeof(global::Demo.MainView));");
+        StringAssert.Contains(code, "services.AddKeyedTransient<global::Demo.IView>(__keyValue1, (sp, _) => sp.GetRequiredKeyedService<global::Demo.MainView>(");
+        StringAssert.Contains(code, "new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<global::Demo.IView>(__keyValue1, typeof(global::Demo.MainView)");
+        StringAssert.Contains(code, "services.AddTransient<global::Demo.IView>(sp => sp.GetRequiredKeyedService<global::Demo.UnkeyedView>(");
+        StringAssert.Contains(code, "services.AddKeyedTransient<global::Demo.IView>(\"custom\", (sp, _) => sp.GetRequiredKeyedService<global::Demo.CustomView>(");
+
+        // 生成的 using static + helper 调用必须真正可编译。
+        GeneratorTestHelper.LoadAssembly(output);
+    }
+
+    [TestMethod]
+    public void Generates_KeyTemplate_WithStringPlaceholder()
+    {
+        var (code, output, _) = GeneratorTestHelper.RunGenerator("""
+            using System;
+            using Microsoft.Extensions.DependencyInjection;
+
+            namespace Demo;
+
+            public interface IView { }
+
+            [RegistrationOptions(
+                LifetimeIndex = -1,
+                ServiceTypeIndex = 0,
+                OrderIndex = 1,
+                DefaultLifetime = ServiceLifetime.Transient,
+                DefaultServiceType = typeof(IView),
+                DefaultOrder = 0,
+                KeyTemplate = "{TypeName}.Replace(\"View\", \"\")")]
+            public sealed class ViewAttribute : BaseServiceAttribute
+            {
+                public ViewAttribute(Type? serviceType = null, double order = 0)
+                    : base(ServiceLifetime.Transient, serviceType, order) { }
+            }
+
+            [View] public class MainView : IView { }
+
+            internal static partial class Register
+            {
+                [AutoRegister]
+                public static partial void AddServices(IServiceCollection services);
+            }
+            """);
+
+        StringAssert.Contains(code, "string __keyValue1 = \"MainView\".Replace(\"View\", \"\");");
+        StringAssert.Contains(code, "services.AddKeyedTransient<global::Demo.IView>(__keyValue1, (sp, _) => sp.GetRequiredKeyedService<global::Demo.MainView>(");
+
+        GeneratorTestHelper.LoadAssembly(output);
+    }
+
+    [TestMethod]
+    public void Generates_KeyTemplate_ForFactoryMethod()
+    {
+        var (code, output, _) = GeneratorTestHelper.RunGenerator("""
+            using System;
+            using Microsoft.Extensions.DependencyInjection;
+
+            namespace Demo;
+
+            public class ServiceI { }
+
+            [RegistrationOptions(
+                LifetimeIndex = -1,
+                ServiceTypeIndex = -1,
+                OrderIndex = -1,
+                DefaultLifetime = ServiceLifetime.Singleton,
+                KeyTemplate = "{TypeName}.ToLowerInvariant()")]
+            public sealed class FactoryAttribute : BaseServiceAttribute
+            {
+                public FactoryAttribute() : base(ServiceLifetime.Singleton) { }
+            }
+
+            public class Factory
+            {
+                [Factory]
+                public ServiceI Create() => new();
+            }
+
+            internal static partial class Register
+            {
+                [AutoRegister]
+                public static partial void AddServices(IServiceCollection services);
+            }
+            """);
+
+        StringAssert.Contains(code, "string __keyValue1 = \"ServiceI\".ToLowerInvariant();");
+        StringAssert.Contains(code, "services.AddKeyedSingleton<global::Demo.ServiceI>(__keyValue1, (sp, _) => sp.GetRequiredKeyedService<global::Demo.ServiceI>(__key1));");
+
+        GeneratorTestHelper.LoadAssembly(output);
+    }
+
     // ---- 辅助 ----
 
     /// <summary>取某实现的锚点变量名(如 __key1)。</summary>

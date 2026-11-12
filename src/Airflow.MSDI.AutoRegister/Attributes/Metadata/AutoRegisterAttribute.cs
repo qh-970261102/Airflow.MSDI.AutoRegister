@@ -5,4 +5,9 @@
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = false)]
 public sealed class AutoRegisterAttribute : Attribute
 {
+    /// <summary>
+    /// 追加到生成文件顶部的 using 指令(不含 using 关键字和结尾分号)。
+    /// 支持命名空间、static 类型与 using 别名;不支持 global using。
+    /// </summary>
+    public string[] Usings { get; set; } = Array.Empty<string>();
 }

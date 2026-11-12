@@ -138,6 +138,12 @@
   <data name="AMAR3007_Message" xml:space="preserve">
     <value>同一程序集内只允许一个 [AutoRegister] 方法,已存在 '{0}',请删除多余的方法 '{1}'。</value>
   </data>
+  <data name="AMAR3008_Title" xml:space="preserve">
+    <value>[AutoRegister] 的 Usings 项不是合法的 using 指令</value>
+  </data>
+  <data name="AMAR3008_Message" xml:space="preserve">
+    <value>[AutoRegister] 的 Usings 项 '{0}' 不是合法的 using 指令;请使用命名空间、'static 类型' 或 '别名 = 类型',不要写 using 关键字和结尾分号。</value>
+  </data>
   <data name="AMAR4001_Title" xml:space="preserve">
     <value>缺少 [RegistrationOptions]</value>
   </data>
@@ -197,5 +203,11 @@
   </data>
   <data name="AMAR4007_Message" xml:space="preserve">
     <value>泛型目标类型 '{0}' 与构造参数服务类型 '{1}' 冲突(特性 '{2}');服务类型只允许在一处指定。</value>
+  </data>
+  <data name="AMAR4008_Title" xml:space="preserve">
+    <value>非法的 key 模板</value>
+  </data>
+  <data name="AMAR4008_Message" xml:space="preserve">
+    <value>特性 '{0}' 的 KeyTemplate 非法:{1}。支持的占位符:{{Type}}、{{TypeName}}、{{ServiceType}}、{{ServiceTypeName}}、{{Namespace}}、{{AssemblyName}}。</value>
   </data>
 </root>

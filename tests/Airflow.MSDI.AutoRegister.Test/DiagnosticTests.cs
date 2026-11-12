@@ -820,6 +820,101 @@ public sealed class DiagnosticTests
         Assert.DoesNotContain("global::Demo.ServiceA", code);
     }
 
+    [TestMethod]
+    public void AMAR3008_InvalidUsingEntry_ReportsAndKeepsValidEntries()
+    {
+        var (code, _, diagnostics) = GeneratorTestHelper.RunGenerator("""
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+            [SingletonService]
+            public class ServiceA { }
+            internal static partial class Register
+            {
+                [AutoRegister(Usings = new[]
+                {
+                    "System.Text",
+                    "Bad; using Evil",
+                })]
+                public static partial void AddServices(IServiceCollection services);
+            }
+            """);
+
+        AssertHas(diagnostics, "AMAR3008", "Bad; using Evil");
+        StringAssert.Contains(code, "using System.Text;");
+        Assert.DoesNotContain("using Bad", code, "非法 using 不应写入生成文件");
+        StringAssert.Contains(code, "services.AddKeyedSingleton<global::Demo.ServiceA>(__key1);");
+    }
+
+    [TestMethod]
+    public void AMAR4008_UnknownPlaceholder_ReportsAndSkipsAttribute()
+    {
+        var (code, _, diagnostics) = GeneratorTestHelper.RunGenerator("""
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+
+            [RegistrationOptions(
+                LifetimeIndex = -1,
+                ServiceTypeIndex = -1,
+                OrderIndex = -1,
+                DefaultLifetime = ServiceLifetime.Singleton,
+                KeyTemplate = "{Unknown}")]
+            public sealed class KeyedAttribute : BaseServiceAttribute
+            {
+                public KeyedAttribute() : base(ServiceLifetime.Singleton) { }
+            }
+
+            [Keyed] public class ServiceA { }
+
+            internal static partial class Register
+            {
+                [AutoRegister]
+                public static partial void AddServices(IServiceCollection services);
+            }
+            """);
+
+        AssertHas(diagnostics, "AMAR4008", "KeyedAttribute", "Unknown");
+        Assert.AreEqual(string.Empty, code, "非法 KeyTemplate 的特性类不应生成注册");
+    }
+
+    [TestMethod]
+    public void AMAR2009_DoesNotApplyToRuntimeKeyTemplate()
+    {
+        var (code, outputCompilation, diagnostics) = GeneratorTestHelper.RunGenerator("""
+            using Microsoft.Extensions.DependencyInjection;
+            namespace Demo;
+
+            public interface IService { }
+
+            [RegistrationOptions(
+                LifetimeIndex = -1,
+                ServiceTypeIndex = -1,
+                OrderIndex = -1,
+                DefaultLifetime = ServiceLifetime.Singleton,
+                DefaultServiceType = typeof(IService),
+                KeyTemplate = "\"same\"")]
+            public sealed class KeyedAttribute : BaseServiceAttribute
+            {
+                public KeyedAttribute() : base(ServiceLifetime.Singleton) { }
+            }
+
+            [Keyed] public class ServiceA : IService { }
+            [Keyed] public class ServiceB : IService { }
+
+            internal static partial class Register
+            {
+                [AutoRegister]
+                public static partial void AddServices(IServiceCollection services);
+            }
+            """);
+
+        // 模板 key 是运行时值,无法静态判重;两条注册都保留。
+        AssertNotHas(diagnostics, "AMAR2009");
+        AssertNotHas(diagnostics, "AMAR2005");
+        StringAssert.Contains(code, "string __keyValue1 = \"same\";");
+        StringAssert.Contains(code, "string __keyValue2 = \"same\";");
+        GeneratorTestHelper.LoadAssembly(outputCompilation);
+    }
+
     // ---- 辅助 ----
 
     private static Diagnostic? Find(ImmutableArray<Diagnostic> diagnostics, string id) =>

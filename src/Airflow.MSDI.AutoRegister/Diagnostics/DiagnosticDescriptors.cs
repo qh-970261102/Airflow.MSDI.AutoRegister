@@ -185,6 +185,13 @@ namespace Airflow.MSDI.AutoRegister.Diagnostics
             LocalizedStrings.Get("AMAR3007_Message"),
             Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
+        /// <summary>[AutoRegister] 的 Usings 项不是合法的 using 指令。</summary>
+        public static readonly DiagnosticDescriptor AMAR3008 = new(
+            "AMAR3008",
+            LocalizedStrings.Get("AMAR3008_Title"),
+            LocalizedStrings.Get("AMAR3008_Message"),
+            Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
         // ---- 4. 特性元数据相关 ----
 
         /// <summary>BaseServiceAttribute 子类缺少 [RegistrationOptions]。</summary>
@@ -234,6 +241,13 @@ namespace Airflow.MSDI.AutoRegister.Diagnostics
             "AMAR4007",
             LocalizedStrings.Get("AMAR4007_Title"),
             LocalizedStrings.Get("AMAR4007_Message"),
+            Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+        /// <summary>KeyTemplate 不是合法的 C# 表达式模板。</summary>
+        public static readonly DiagnosticDescriptor AMAR4008 = new(
+            "AMAR4008",
+            LocalizedStrings.Get("AMAR4008_Title"),
+            LocalizedStrings.Get("AMAR4008_Message"),
             Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
     }
 }
