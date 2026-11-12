@@ -32,6 +32,7 @@ Manually registering dozens of services is tedious and error-prone. Reflection-b
 - **Aggregate collections**: `IEnumerable<T>` includes both keyed and non-keyed implementations — the built-in MSDI enumeration only sees non-keyed ones
 - **Metadata helpers**: `GetRegisterItems<T>()`, `FindRegisterItem<T>(key)`, `GetRegisterMap<T>()` and `ToKeyValuePairs()` for reading the registration table without boilerplate
 - Extensible: write your own attribute by deriving from `BaseServiceAttribute` and describing it with `[RegistrationOptions]`
+- **Custom usings + key templates**: `[AutoRegister(Usings = ...)]` adds using directives to the generated file; `[RegistrationOptions(KeyTemplate = ...)]` derives keys from a C# expression (for example your own `GetViewRegisterKey` helper)
 - `[AutoRegister]` on a `partial` method triggers code generation (one per assembly)
 
 ## Quick Start
@@ -327,20 +328,21 @@ public class ServiceX : InterfaceX { }
     OrderIndex = 1,                              // ctor #1 = Order
     DefaultLifetime = ServiceLifetime.Transient,
     DefaultServiceType = typeof(IView),          // [View] without arguments → IView
-    DefaultOrder = 0)]
+    DefaultOrder = 0,
+    KeyTemplate = "GetViewRegisterKey({Type})")] // runtime key expression
 public sealed class ViewAttribute : BaseServiceAttribute
 {
     public ViewAttribute(Type? serviceType = null, double order = 0)
         : base(ServiceLifetime.Transient, serviceType, order) { }
 }
 
-[View]                                           // → IView (Transient, Order 0)
+[View]                                           // → keyed IView, key "Main"
 public class MainView : IView { }
 
-[View(Order = 1)]                                // → IView, ordered after MainView
+[View(Order = 1)]                                // → keyed IView, key "Settings"
 public class SettingsView : IView { }
 
-[View(typeof(ISpecialView))]                     // explicit target overrides the default
+[View(typeof(ISpecialView))]                     // explicit target overrides the default; key "Special"
 public class SpecialView : IView, ISpecialView { }
 
 [ViewModel(Key = "settings")]                    // → keyed IViewModel registration
@@ -350,6 +352,54 @@ public class SettingsViewModel : IViewModel { }
 The full example lives in `simple/Airflow.MSDI.AutoRegister.Demo/Attributes/` and its output is printed by the demo program.
 
 A generic attribute class with exactly one type parameter is treated as "target type" (the same convention as the built-in generic attributes).
+
+#### Generated-file usings and key templates
+
+`[AutoRegister]` can append using directives to the generated file. Entries are namespace names, `static Type`, or `Alias = Type`; `global using` is not supported:
+
+```csharp
+[AutoRegister(Usings = new[]
+{
+    "MyCompany.Framework",
+    "static MyCompany.DependencyInjection.ViewKey",
+})]
+public static partial void AddServicesFromCurrentAssembly(IServiceCollection services);
+```
+
+`KeyTemplate` is a C# expression template. The generator substitutes placeholders and writes the expression into generated code; it is **evaluated at runtime**, not by the generator. This lets a custom attribute reuse a helper such as:
+
+```csharp
+namespace MyCompany.DependencyInjection;
+
+public static class ViewKey
+{
+    public static string GetViewRegisterKey(Type viewType)
+    {
+        var name = viewType.Name;
+        return name.EndsWith("View", StringComparison.Ordinal)
+            ? name.Substring(0, name.Length - "View".Length)
+            : name;
+    }
+}
+```
+
+```csharp
+[RegistrationOptions(..., KeyTemplate = "GetViewRegisterKey({Type})")]
+public sealed class ViewAttribute : BaseServiceAttribute { ... }
+```
+
+Generated code:
+
+```csharp
+using static MyCompany.DependencyInjection.ViewKey;
+
+string __keyValue1 = GetViewRegisterKey(typeof(global::Demo.MainView));
+services.AddKeyedTransient<IView>(__keyValue1, (sp, _) => ...);
+new RegisterItemInfo<IView>(__keyValue1, typeof(MainView), ServiceLifetime.Transient, 0),
+```
+
+Supported placeholders: `{Type}`, `{TypeName}`, `{ServiceType}`, `{ServiceTypeName}`, `{Namespace}`, `{AssemblyName}`. `{{` / `}}` are literal braces; string concatenation uses normal `+`.
+`Key` still overrides the template; `Key = null` disables it for one usage. Because template keys are runtime values, `AMAR2009` / `AMAR2005` validate only literal keys. `Usings` does not add assembly references; reference the helper's assembly in the project.
 
 ## Diagnostics
 
@@ -381,6 +431,7 @@ The generator reports `AMAR`-prefixed diagnostics — **errors block compilation
 | AMAR3005 | Error | [AutoRegister] method signature must be (IServiceCollection services) |
 | AMAR3006 | Warning | No registerable services found in the assembly |
 | AMAR3007 | Error | Only one [AutoRegister] method is allowed per assembly |
+| AMAR3008 | Error | [AutoRegister] Usings entry is not a valid using directive |
 | AMAR4001 | Error | Missing [RegistrationOptions] |
 | AMAR4002 | Error | [RegistrationOptions] index exceeds constructor parameter count |
 | AMAR4003 | Error | [RegistrationOptions] index points to a parameter of the wrong type |
@@ -388,6 +439,7 @@ The generator reports `AMAR`-prefixed diagnostics — **errors block compilation
 | AMAR4005 | Warning | Multiple [RegistrationOptions] on the inheritance chain |
 | AMAR4006 | Error | Generic registration attribute has too many type parameters |
 | AMAR4007 | Error | Conflicting service types in the registration attribute |
+| AMAR4008 | Error | Invalid key template |
 
 ## Compatibility
 
@@ -395,6 +447,8 @@ The generator reports `AMAR`-prefixed diagnostics — **errors block compilation
 - **Keyed registrations require MSDI 8.0+ (.NET 8+)** at runtime; non-keyed registrations keep working on older containers, but the package dependency is raised.
 - The generator targets `netstandard2.0` and runs on the .NET SDK's Roslyn.
 - Generated code needs **C# 9+**; the **generic attribute syntax needs C# 11+** (legacy `typeof(...)` form works on C# 9+).
+- `[AutoRegister(Usings = ...)]` only writes using directives; it cannot add assembly references (use `<Reference>` / `<ProjectReference>`).
+- `KeyTemplate` is opt-in and evaluated at **runtime** during `AddServices` (one helper call per registration, no reflection). Because the key value is not known at compile time, `AMAR2009` / `AMAR2005` only validate explicit literal keys.
 
 ## Migrating from 1.x
 

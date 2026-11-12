@@ -16,4 +16,10 @@ public class RegistrationOptionsAttribute : Attribute
     public Type? DefaultServiceType { get; set; } = null;
 
     public double DefaultOrder { get; set; } = 0;
+
+    /// <summary>
+    /// 该特性类的默认 key 表达式模板;null/空表示不生成默认 key。
+    /// 模板中的占位符会被替换后写入生成代码(运行时求值),源生成器不会执行它。
+    /// </summary>
+    public string? KeyTemplate { get; set; }
 }

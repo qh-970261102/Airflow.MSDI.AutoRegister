@@ -10,10 +10,10 @@
 
     <!-- NuGet 打包 -->
     <PackageId>Airflow.MSDI.AutoRegister</PackageId>
-    <Version>2.0.0</Version>
+    <Version>2.1.0</Version>
     <Authors>Airflow</Authors>
-    <Description>A source generator for Microsoft.Extensions.DependencyInjection that auto-registers your services at compile time - keyed services, generic attributes, registration metadata and aggregate collections, zero reflection, zero runtime overhead. 基于源生成器的 MSDI 自动注册库:编译期生成 keyed/非 keyed 注册、注册元数据与实现集合,零反射、零运行时开销。</Description>
-    <PackageTags>msdi;dependency-injection;di;source-generator;autoregister;generator;keyed-services;keyed</PackageTags>
+    <Description>A source generator for Microsoft.Extensions.DependencyInjection that auto-registers your services at compile time - keyed services, generic attributes, custom usings, runtime key templates, registration metadata and aggregate collections, zero reflection. 基于源生成器的 MSDI 自动注册库:编译期生成 keyed/非 keyed 注册、支持自定义 using 与运行时 key 模板、注册元数据与实现集合,零反射。</Description>
+    <PackageTags>msdi;dependency-injection;di;source-generator;autoregister;generator;keyed-services;keyed;key-template;usings</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryType>git</RepositoryType>

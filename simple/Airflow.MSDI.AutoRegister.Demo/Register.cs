@@ -8,7 +8,10 @@ namespace Airflow.MSDI.AutoRegister.Demo;
 /// </summary>
 internal static partial class Register
 {
-    [AutoRegister]
+    [AutoRegister(Usings = new[]
+    {
+        "static Airflow.MSDI.AutoRegister.Demo.KeyTemplates.ViewKey",
+    })]
     public static partial void AddServicesFromCurrentAssembly(IServiceCollection services);
 
     public static IServiceCollection AddServices(this IServiceCollection services)
