@@ -113,12 +113,15 @@ var interfaceM1 = provider.GetRequiredService<ISharedLeft>();
 var interfaceM2 = provider.GetRequiredService<ISharedRight>();
 Console.WriteLine($"同一实现多接口共享实例(ServiceM): {ReferenceEquals(interfaceM1, interfaceM2)}");
 
-// --- 自定义特性:默认 targettype / 默认生命周期(DefaultServiceType / DefaultLifetime) ---
+// --- 自定义特性:默认 targettype / 默认生命周期 / KeyTemplate ---
 var views = provider.GetServices<IView>().ToList();
 Console.WriteLine($"自定义 [View] 默认注册为 IView({views.Count}): [{string.Join(", ", views.Select(v => v.GetType().Name))}]");
 
-var specialView = provider.GetRequiredService<ISpecialView>();
-Console.WriteLine($"自定义 [View(typeof(ISpecialView))] 覆盖默认目标: {specialView.GetType().Name}");
+var mainView = provider.GetRequiredKeyedService<IView>("Main");
+Console.WriteLine($"自定义 [View] 的 KeyTemplate(MainView → \"Main\"): {mainView.GetType().Name}");
+
+var specialView = provider.GetRequiredKeyedService<ISpecialView>("Special");
+Console.WriteLine($"自定义 [View(typeof(ISpecialView))] 覆盖默认目标/key: {specialView.GetType().Name}");
 
 var viewModels = provider.GetServices<IViewModel>().ToList();
 Console.WriteLine($"自定义 [ViewModel] 默认注册为 IViewModel({viewModels.Count}): [{string.Join(", ", viewModels.Select(v => v.GetType().Name))}]");

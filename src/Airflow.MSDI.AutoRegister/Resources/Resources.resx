@@ -138,6 +138,12 @@
   <data name="AMAR3007_Message" xml:space="preserve">
     <value>Only one [AutoRegister] method is allowed per assembly; '{0}' already exists, remove the extra method '{1}'.</value>
   </data>
+  <data name="AMAR3008_Title" xml:space="preserve">
+    <value>[AutoRegister] Usings entry is not a valid using directive</value>
+  </data>
+  <data name="AMAR3008_Message" xml:space="preserve">
+    <value>The [AutoRegister] Usings entry '{0}' is not a valid using directive; use a namespace, 'static Type', or 'Alias = Type' without the 'using' keyword or trailing semicolon.</value>
+  </data>
   <data name="AMAR4001_Title" xml:space="preserve">
     <value>Missing [RegistrationOptions]</value>
   </data>
@@ -197,5 +203,11 @@
   </data>
   <data name="AMAR4007_Message" xml:space="preserve">
     <value>The generic target type '{0}' conflicts with the constructor service type '{1}' on '{2}'; specify the service type in only one place.</value>
+  </data>
+  <data name="AMAR4008_Title" xml:space="preserve">
+    <value>Invalid key template</value>
+  </data>
+  <data name="AMAR4008_Message" xml:space="preserve">
+    <value>The KeyTemplate on attribute '{0}' is invalid: {1}. Supported placeholders: {{Type}}, {{TypeName}}, {{ServiceType}}, {{ServiceTypeName}}, {{Namespace}}, {{AssemblyName}}.</value>
   </data>
 </root>

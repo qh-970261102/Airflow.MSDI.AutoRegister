@@ -70,7 +70,7 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
         if (string.IsNullOrEmpty(body))
             return;
 
-        var code = Emitter.Emit(method, body);
+        var code = Emitter.Emit(method, body, analyzer.GetUsings(method));
         var hintName = $"AutoRegister.{method.ContainingType.Name}.{method.Name}.g.cs";
         spc.AddSource(hintName, SourceText.From(code, Encoding.UTF8));
     }
@@ -83,6 +83,18 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
 
         /// <summary>服务 key;null 表示非 keyed。</summary>
         public string? Key { get; set; }
+
+        /// <summary>KeyTemplate 展开后的 C# 表达式;运行时求值。null 表示没有使用模板。</summary>
+        public string? KeyExpression { get; set; }
+
+        /// <summary>生成代码中缓存 key 表达式的局部变量名。</summary>
+        public string? KeyVariable { get; set; }
+
+        /// <summary>是否生成 keyed 注册。</summary>
+        public bool HasKey => Key is not null || KeyExpression is not null;
+
+        /// <summary>排序用 key 文本(运行时表达式只作稳定 tie-breaker)。</summary>
+        public string KeySortKey => KeyExpression ?? Key ?? string.Empty;
 
         /// <summary>生命周期:0=Singleton, 1=Scoped, 2=Transient。</summary>
         public int Lifetime { get; set; }
@@ -148,6 +160,7 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
         private readonly List<Registration> _registrations = new();
         private readonly List<IMethodSymbol> _autoRegisterMethods = new();
         private readonly Dictionary<IMethodSymbol, bool> _autoRegisterValidity = new(SymbolEqualityComparer.Default);
+        private readonly Dictionary<IMethodSymbol, IReadOnlyList<string>> _usingsByMethod = new(SymbolEqualityComparer.Default);
         private readonly HashSet<INamedTypeSymbol> _validatedAttributeClasses = new(SymbolEqualityComparer.Default);
         private readonly HashSet<INamedTypeSymbol> _brokenAttributeClasses = new(SymbolEqualityComparer.Default);
         private readonly Dictionary<INamedTypeSymbol, RegistrationOptionsData?> _optionsByAttrClass = new(SymbolEqualityComparer.Default);
@@ -183,6 +196,10 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
             _autoRegisterValidity.TryGetValue(PrimaryAutoRegisterMethod, out var v) && v;
 
         public bool FoundAnyServiceAttribute => _foundAnyServiceAttribute;
+
+        /// <summary>读取主 [AutoRegister] 方法的额外 using 指令(不含 using 关键字和分号)。</summary>
+        public IReadOnlyList<string> GetUsings(IMethodSymbol method) =>
+            _usingsByMethod.TryGetValue(method, out var usings) ? usings : Array.Empty<string>();
 
         public void Analyze(SourceProductionContext spc)
         {
@@ -245,6 +262,10 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
                 {
                     _autoRegisterMethods.Add(method);
                     _autoRegisterValidity[method] = ValidateAutoRegisterMethod(spc, method);
+
+                    var autoRegisterAttr = method.GetAttributes()
+                        .First(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, _autoRegisterAttributeType));
+                    _usingsByMethod[method] = ReadUsings(spc, autoRegisterAttr);
                 }
 
                 var methodAttrs = method.GetAttributes().Where(a => IsServiceAttribute(a.AttributeClass)).ToList();
@@ -294,7 +315,6 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
 
                 if (TryReadNamedOrder(attr, out var namedOrder))
                     order = namedOrder;
-                TryReadKey(attr, out var key);
 
                 var serviceType = declaredType ?? type;
 
@@ -305,10 +325,13 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
                     continue;
                 }
 
+                var key = ResolveKey(attr, type, serviceType);
+
                 _registrations.Add(new Registration
                 {
                     ServiceType = serviceType,
-                    Key = key,
+                    Key = key.Literal,
+                    KeyExpression = key.Expression,
                     Lifetime = lifetime,
                     Order = order,
                     InstanceType = type,
@@ -355,7 +378,6 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
 
                     if (TryReadNamedOrder(attr, out var namedOrder))
                         order = namedOrder;
-                    TryReadKey(attr, out var key);
 
                     var serviceType = declaredType ?? returnType;
 
@@ -373,10 +395,13 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
                         continue;
                     }
 
+                    var key = ResolveKey(attr, returnType, serviceType);
+
                     _registrations.Add(new Registration
                     {
                         ServiceType = serviceType,
-                        Key = key,
+                        Key = key.Literal,
+                        KeyExpression = key.Expression,
                         Lifetime = lifetime,
                         Order = order,
                         InstanceType = returnType,
@@ -602,6 +627,65 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
         }
 
         /// <summary>
+        /// 读取 [AutoRegister] 的 Usings 数组。每项是 using 指令正文(命名空间/static 类型/别名),
+        /// 用完整编译单元校验,防止把任意代码注入生成文件。
+        /// </summary>
+        private IReadOnlyList<string> ReadUsings(SourceProductionContext spc, AttributeData attr)
+        {
+            var result = new List<string>();
+            foreach (var named in attr.NamedArguments)
+            {
+                if (named.Key != "Usings" || named.Value.IsNull)
+                    continue;
+
+                foreach (var item in named.Value.Values)
+                {
+                    if (item.Value is not string raw)
+                    {
+                        Report(spc, DiagnosticDescriptors.AMAR3008,
+                            AttrLocation(attr) ?? Location.None, "<null>");
+                        continue;
+                    }
+
+                    var value = raw.Trim();
+                    while (value.EndsWith(";", StringComparison.Ordinal))
+                        value = value.Substring(0, value.Length - 1).TrimEnd();
+
+                    if (!IsValidUsingDirective(value))
+                    {
+                        Report(spc, DiagnosticDescriptors.AMAR3008,
+                            AttrLocation(attr) ?? Location.None, raw);
+                        continue;
+                    }
+
+                    // 生成文件始终自带该 using,避免 CS0105。
+                    if (value == "Microsoft.Extensions.DependencyInjection")
+                        continue;
+
+                    if (!result.Contains(value, StringComparer.Ordinal))
+                        result.Add(value);
+                }
+            }
+
+            return result;
+        }
+
+        private static bool IsValidUsingDirective(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return false;
+
+            var unit = SyntaxFactory.ParseCompilationUnit($"using {value};");
+            var directive = unit.Usings.Count == 1 ? unit.Usings[0] : null;
+            return directive is not null
+                && unit.Members.Count == 0
+                && unit.AttributeLists.Count == 0
+                && unit.Externs.Count == 0
+                && !unit.ContainsDiagnostics
+                && directive.GlobalKeyword.IsKind(SyntaxKind.None);
+        }
+
+        /// <summary>
         /// 校验特性类上的 RegistrationOptions 元数据(4001/4002/4003/4004/4005)。
         /// 元数据损坏的特性类被标记为 broken,其所有使用点的注册将被跳过。
         /// </summary>
@@ -651,6 +735,20 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
 
             var options = ParseOptions(optionsFound[0]); // 最近的
             _optionsByAttrClass[attrClass] = options;
+
+            // AMAR4008: KeyTemplate 必须是合法的 C# 表达式模板。
+            if (!string.IsNullOrWhiteSpace(options.KeyTemplateText))
+            {
+                if (!KeyTemplateExpression.TryParse(options.KeyTemplateText!, out var keyTemplate, out var keyTemplateError))
+                {
+                    Report(spc, DiagnosticDescriptors.AMAR4008, classLocation, MsgName(attrClass), keyTemplateError ?? string.Empty);
+                    _brokenAttributeClasses.Add(attrClass);
+                }
+                else
+                {
+                    options.KeyTemplate = keyTemplate;
+                }
+            }
 
             // AMAR4004: 默认生命周期值非法。
             if (options.DefaultLifetime is not (0 or 1 or 2))
@@ -762,6 +860,9 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
                     case nameof(RegistrationOptionsData.DefaultOrder):
                         options.DefaultOrder = named.Value.Value is null ? 0 : Convert.ToDouble(named.Value.Value);
                         break;
+                    case "KeyTemplate":
+                        options.KeyTemplateText = named.Value.Value as string;
+                        break;
                 }
             }
             return options;
@@ -838,19 +939,37 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
             return (lifetimeMethod, lifetimeInt, order);
         }
 
-        /// <summary>读取 Key 命名参数;null 表示非 keyed。</summary>
-        private static void TryReadKey(AttributeData attr, out string? key)
+        /// <summary>读取 Key 命名参数;返回是否显式指定(显式 null 表示退出 KeyTemplate)。</summary>
+        private static bool TryReadKey(AttributeData attr, out string? key)
         {
-            key = null;
             foreach (var named in attr.NamedArguments)
             {
                 if (named.Key != "Key")
                     continue;
-                if (named.Value.IsNull)
-                    return;
-                key = named.Value.Value as string;
-                return;
+                key = named.Value.IsNull ? null : named.Value.Value as string;
+                return true;
             }
+
+            key = null;
+            return false;
+        }
+
+        /// <summary>
+        /// 解析 key:显式 Key 优先(含显式 null 退出模板);否则展开特性类的 KeyTemplate。
+        /// </summary>
+        private (string? Literal, string? Expression) ResolveKey(
+            AttributeData attr,
+            INamedTypeSymbol implementationType,
+            INamedTypeSymbol serviceType)
+        {
+            if (TryReadKey(attr, out var explicitKey))
+                return (explicitKey, null);
+
+            var options = ReadOptions(attr.AttributeClass!);
+            if (options.KeyTemplate is null)
+                return (null, null);
+
+            return (null, options.KeyTemplate.Expand(new KeyTemplateContext(implementationType, serviceType)));
         }
 
         /// <summary>读取 Order 命名参数(优先于构造参数)。</summary>
@@ -912,7 +1031,8 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
         private void ValidateDuplicateRegistrations(SourceProductionContext spc)
         {
             var groups = new Dictionary<(INamedTypeSymbol Service, string? Key), List<Registration>>(ServiceKeyComparer.Instance);
-            foreach (var r in _registrations)
+            // KeyTemplate 生成的是运行时表达式,无法静态比较;仅校验显式/常量 key。
+            foreach (var r in _registrations.Where(r => r.KeyExpression is null))
             {
                 var k = (r.ServiceType, r.Key);
                 if (!groups.TryGetValue(k, out var list))
@@ -1005,6 +1125,29 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
                 AppendAnchor(sb, group);
             sb.AppendLine();
 
+            // 4) 注册排序 + KeyTemplate 局部变量(只求值一次)
+            var orderedRegistrations = registrations
+                .OrderBy(r => r.Order)
+                .ThenBy(r => Fmt(r.InstanceType), StringComparer.Ordinal)
+                .ThenBy(r => r.KeySortKey, StringComparer.Ordinal)
+                .ThenBy(r => r.Seq)
+                .ToList();
+
+            var keyValueIndex = 0;
+            foreach (var r in orderedRegistrations)
+            {
+                if (r.KeyExpression is null)
+                    continue;
+                r.KeyVariable = "__keyValue" + (++keyValueIndex).ToString(CultureInfo.InvariantCulture);
+            }
+
+            if (keyValueIndex > 0)
+            {
+                foreach (var r in orderedRegistrations.Where(r => r.KeyVariable is not null))
+                    sb.AppendLine($"{Indent}string {r.KeyVariable} = {r.KeyExpression};");
+                sb.AppendLine();
+            }
+
             // 6) 工厂拥有类(自动注册为非 keyed 单例,每类一次)
             var owners = registrations
                 .Where(r => r.FactoryMethod is not null)
@@ -1019,12 +1162,8 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
                 sb.AppendLine();
             }
 
-            // 4) 服务注册(全部是锚点别名,按 Order → 实现类型名 → key 排序)
-            foreach (var r in registrations
-                         .OrderBy(r => r.Order)
-                         .ThenBy(r => Fmt(r.InstanceType), StringComparer.Ordinal)
-                         .ThenBy(r => r.Key, StringComparer.Ordinal)
-                         .ThenBy(r => r.Seq))
+            // 5) 服务注册(全部是锚点别名,按 Order → 实现类型名 → key 排序)
+            foreach (var r in orderedRegistrations)
             {
                 sb.AppendLine(EmitRegistration(r));
             }
@@ -1042,7 +1181,7 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
                     .Where(r => SymbolEqualityComparer.Default.Equals(r.ServiceType, serviceType))
                     .OrderBy(r => r.Order)
                     .ThenBy(r => Fmt(r.ImplDisplay), StringComparer.Ordinal)
-                    .ThenBy(r => r.Key, StringComparer.Ordinal)
+                    .ThenBy(r => r.KeySortKey, StringComparer.Ordinal)
                     .ThenBy(r => r.Seq)
                     .ToList();
 
@@ -1084,9 +1223,9 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
             var serviceType = Fmt(r.ServiceType);
             var resolve = $"sp.GetRequiredKeyedService<{Fmt(r.InstanceType)}>({r.Group.AnchorKey})";
 
-            return r.Key is null
-                ? $"{Indent}services.{lifetimeMethod}<{serviceType}>(sp => {resolve});"
-                : $"{Indent}services.{keyedMethod}<{serviceType}>({KeyLiteral(r.Key)}, (sp, _) => {resolve});";
+            return r.HasKey
+                ? $"{Indent}services.{keyedMethod}<{serviceType}>({KeyArgument(r)}, (sp, _) => {resolve});"
+                : $"{Indent}services.{lifetimeMethod}<{serviceType}>(sp => {resolve});";
         }
 
         private static void AppendMetadata(StringBuilder sb, INamedTypeSymbol serviceType, List<Registration> items)
@@ -1096,7 +1235,7 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
             sb.AppendLine($"{Indent}{{");
             foreach (var r in items)
             {
-                sb.AppendLine($"{Indent}    new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<{service}>({KeyLiteral(r.Key)}, typeof({Fmt(r.ImplDisplay)}), {LifetimeLiteral(r.Lifetime)}, {OrderLiteral(r.Order)}),");
+                sb.AppendLine($"{Indent}    new global::Airflow.MSDI.AutoRegister.RegisterItemInfo<{service}>({KeyArgument(r)}, typeof({Fmt(r.ImplDisplay)}), {LifetimeLiteral(r.Lifetime)}, {OrderLiteral(r.Order)}),");
             }
             sb.AppendLine($"{Indent}}});");
         }
@@ -1137,6 +1276,10 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
 
         private static string KeyLiteral(string? key) =>
             key is null ? "null" : SymbolDisplay.FormatLiteral(key, quote: true);
+
+        /// <summary>生成代码中的 key 实参:模板 key 优先用缓存局部变量。</summary>
+        private static string KeyArgument(Registration r) =>
+            r.KeyVariable ?? KeyLiteral(r.Key);
 
         private static string OrderLiteral(double order) =>
             order.ToString("R", CultureInfo.InvariantCulture);
@@ -1242,12 +1385,14 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
         public int DefaultLifetime { get; set; } = 0; // 0 = Singleton, 1 = Scoped, 2 = Transient
         public ITypeSymbol? DefaultServiceType { get; set; }
         public double DefaultOrder { get; set; }
+        public string? KeyTemplateText { get; set; }
+        public KeyTemplateExpression? KeyTemplate { get; set; }
     }
 
     /// <summary>把注册体渲染成 partial 类文件。</summary>
     private static class Emitter
     {
-        public static string Emit(IMethodSymbol method, string body)
+        public static string Emit(IMethodSymbol method, string body, IReadOnlyList<string> extraUsings)
         {
             var declaringSyntax = method.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() as MethodDeclarationSyntax;
             var namespaceName = method.ContainingNamespace.IsGlobalNamespace ? null : method.ContainingNamespace.ToDisplayString();
@@ -1255,7 +1400,11 @@ public sealed class AutoRegisterGenerator : IIncrementalGenerator
             var sb = new StringBuilder();
             sb.AppendLine("// <auto-generated/>");
             sb.AppendLine("#nullable enable");
+            sb.AppendLine("#pragma warning disable CS0105");
             sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
+            foreach (var usingDirective in extraUsings)
+                sb.AppendLine($"using {usingDirective};");
+            sb.AppendLine("#pragma warning restore CS0105");
             sb.AppendLine();
 
             void OpenNs()

@@ -32,6 +32,7 @@
 - **实现集合**:`IEnumerable<T>` 同时包含 keyed 与非 keyed 实现(MSDI 原生枚举只能看到非 keyed)
 - **元数据便捷扩展**:`GetRegisterItems<T>()`、`FindRegisterItem<T>(key)`、`GetRegisterMap<T>()`、`ToKeyValuePairs()`,不用手写遍历样板
 - 可扩展:继承 `BaseServiceAttribute` 并配合 `[RegistrationOptions]` 描述元数据,即可自定义特性
+- **自定义 using + key 模板**:`[AutoRegister(Usings = ...)]` 向生成文件追加 using;`[RegistrationOptions(KeyTemplate = ...)]` 用 C# 表达式推导 key(例如 `GetViewRegisterKey`)
 - `[AutoRegister]` 打在 `partial` 方法上触发代码生成(每个程序集一个)
 
 ## 快速开始
@@ -327,20 +328,21 @@ public class ServiceX : InterfaceX { }
     OrderIndex = 1,                              // 构造参数 #1 = Order
     DefaultLifetime = ServiceLifetime.Transient,
     DefaultServiceType = typeof(IView),          // [View] 不写参数时 → IView
-    DefaultOrder = 0)]
+    DefaultOrder = 0,
+    KeyTemplate = "GetViewRegisterKey({Type})")] // 运行时 key 表达式
 public sealed class ViewAttribute : BaseServiceAttribute
 {
     public ViewAttribute(Type? serviceType = null, double order = 0)
         : base(ServiceLifetime.Transient, serviceType, order) { }
 }
 
-[View]                                           // → IView(Transient,Order 0)
+[View]                                           // → keyed IView,key "Main"
 public class MainView : IView { }
 
-[View(Order = 1)]                                // → IView,排在 MainView 之后
+[View(Order = 1)]                                // → keyed IView,key "Settings"
 public class SettingsView : IView { }
 
-[View(typeof(ISpecialView))]                     // 显式目标覆盖默认值
+[View(typeof(ISpecialView))]                     // 显式目标覆盖默认值,key "Special"
 public class SpecialView : IView, ISpecialView { }
 
 [ViewModel(Key = "settings")]                    // → keyed IViewModel 注册
@@ -350,6 +352,54 @@ public class SettingsViewModel : IViewModel { }
 完整示例在 `simple/Airflow.MSDI.AutoRegister.Demo/Attributes/`,运行 Demo 可以看到实际输出。
 
 带 **1 个类型参数**的泛型特性会被当作"目标类型"处理(与内置泛型特性同一约定)。
+
+#### 生成文件的 using 与 key 模板
+
+`[AutoRegister]` 可以向生成文件追加 using 指令。每项支持命名空间、`static 类型`、`别名 = 类型`;不支持 `global using`:
+
+```csharp
+[AutoRegister(Usings = new[]
+{
+    "MyCompany.Framework",
+    "static MyCompany.DependencyInjection.ViewKey",
+})]
+public static partial void AddServicesFromCurrentAssembly(IServiceCollection services);
+```
+
+`KeyTemplate` 是一个 C# 表达式模板:生成器只替换占位符并把表达式写进生成代码,**由运行时求值**,不是在生成器里执行。因此可以复用用户自己的 helper:
+
+```csharp
+namespace MyCompany.DependencyInjection;
+
+public static class ViewKey
+{
+    public static string GetViewRegisterKey(Type viewType)
+    {
+        var name = viewType.Name;
+        return name.EndsWith("View", StringComparison.Ordinal)
+            ? name.Substring(0, name.Length - "View".Length)
+            : name;
+    }
+}
+```
+
+```csharp
+[RegistrationOptions(..., KeyTemplate = "GetViewRegisterKey({Type})")]
+public sealed class ViewAttribute : BaseServiceAttribute { ... }
+```
+
+生成代码:
+
+```csharp
+using static MyCompany.DependencyInjection.ViewKey;
+
+string __keyValue1 = GetViewRegisterKey(typeof(global::Demo.MainView));
+services.AddKeyedTransient<IView>(__keyValue1, (sp, _) => ...);
+new RegisterItemInfo<IView>(__keyValue1, typeof(MainView), ServiceLifetime.Transient, 0),
+```
+
+支持的占位符:`{Type}`、`{TypeName}`、`{ServiceType}`、`{ServiceTypeName}`、`{Namespace}`、`{AssemblyName}`。`{{` / `}}` 表示字面量花括号;字符串拼接用普通 `+`。
+`Key` 仍然覆盖模板;某个使用点写 `Key = null` 可关闭模板。模板 key 是运行时值,所以 `AMAR2009` / `AMAR2005` 只校验显式字面量 key。`Usings` 不能添加程序集引用,helper 所在程序集仍需在项目中引用。
 
 ## 诊断
 
@@ -381,6 +431,7 @@ public class SettingsViewModel : IViewModel { }
 | AMAR3005 | Error | [AutoRegister] 方法签名必须是 (IServiceCollection services) |
 | AMAR3006 | Warning | 程序集内没有可注册的服务 |
 | AMAR3007 | Error | 每个程序集只允许一个 [AutoRegister] 方法 |
+| AMAR3008 | Error | [AutoRegister] 的 Usings 项不是合法的 using 指令 |
 | AMAR4001 | Error | 缺少 [RegistrationOptions] |
 | AMAR4002 | Error | [RegistrationOptions] 索引超出构造函数参数个数 |
 | AMAR4003 | Error | [RegistrationOptions] 索引指向的参数类型不对 |
@@ -388,6 +439,7 @@ public class SettingsViewModel : IViewModel { }
 | AMAR4005 | Warning | 继承链上存在多个 [RegistrationOptions] |
 | AMAR4006 | Error | 泛型注册特性的类型参数超过 1 个 |
 | AMAR4007 | Error | 注册特性中服务类型冲突 |
+| AMAR4008 | Error | 非法的 key 模板 |
 
 ## 兼容性
 
@@ -395,6 +447,8 @@ public class SettingsViewModel : IViewModel { }
 - **keyed 注册在运行期需要 MSDI 8.0+(.NET 8+)**;非 keyed 注册可在旧容器上继续工作,但包依赖已被抬高;
 - 生成器目标 `netstandard2.0`,运行于 .NET SDK 自带的 Roslyn;
 - 生成的代码需要 **C# 9+**;**泛型特性语法需要 C# 11+**(旧 `typeof(...)` 写法 C# 9+ 即可)。
+- `[AutoRegister(Usings = ...)]` 只写 using 指令,不能添加程序集引用(仍需 `<Reference>` / `<ProjectReference>`)。
+- `KeyTemplate` 是 opt-in 的**运行时**求值(每次 `AddServices` 调用一次 helper,无反射)。因为 key 值编译期不可知,`AMAR2009` / `AMAR2005` 只校验显式字面量 key。
 
 ## 从 1.x 迁移
 

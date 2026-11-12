@@ -163,6 +163,24 @@ public sealed class MyServiceAttribute : BaseServiceAttribute
 
 A generic attribute class with exactly one type parameter is treated as "target type".
 
+### Custom usings and KeyTemplate
+
+`[AutoRegister(Usings = new[] { "My.Namespace", "static My.ViewKey" })]` appends using directives to the generated file (namespace, `static Type`, or `Alias = Type`; no `global using`). It cannot add assembly references.
+
+`KeyTemplate` on `[RegistrationOptions]` is a C# expression template. The generator substitutes placeholders and emits the expression; it is evaluated at runtime, not by the generator:
+
+```csharp
+[RegistrationOptions(..., KeyTemplate = "GetViewRegisterKey({Type})")]
+public sealed class ViewAttribute : BaseServiceAttribute { ... }
+```
+
+```csharp
+[AutoRegister(Usings = new[] { "static My.ViewKey" })]
+public static partial void AddServicesFromCurrentAssembly(IServiceCollection services);
+```
+
+Generated code uses `string __keyValue1 = GetViewRegisterKey(typeof(global::Demo.MainView));` and shares it between the keyed registration and metadata. Placeholders: `{Type}`, `{TypeName}`, `{ServiceType}`, `{ServiceTypeName}`, `{Namespace}`, `{AssemblyName}`. `Key` overrides the template; `Key = null` disables it. Because keys are runtime values, `AMAR2009`/`AMAR2005` only validate literal keys.
+
 ## Diagnostics → what to change
 
 | ID | Fix |
@@ -176,7 +194,9 @@ A generic attribute class with exactly one type parameter is treated as "target 
 | AMAR2008 | Implementation is abstract/static — make it concrete |
 | AMAR2009 | Two implementations share a named key for the same target type — give each its own key |
 | AMAR3001/3002/3003/3004/3005/3007 | Make `[AutoRegister]` `static partial` inside a `partial` class, signature `(IServiceCollection services)`, no body, only one per assembly |
+| AMAR3008 | Fix the `Usings` entry: use a namespace, `static Type`, or `Alias = Type`, without `using`/`;` |
 | AMAR4001–4007 | Fix `[RegistrationOptions]` / generic attribute usage |
+| AMAR4008 | Fix the `KeyTemplate` placeholder or C# expression syntax |
 
 ## Common AI mistakes to avoid
 
