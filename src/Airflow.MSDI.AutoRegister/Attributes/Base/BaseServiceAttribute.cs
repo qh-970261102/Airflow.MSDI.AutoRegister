@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 
+namespace Airflow.MSDI.AutoRegister;
+
 /// <summary>
 /// 所有注册特性的基类。子类必须使用 <see cref="RegistrationOptionsAttribute"/> 描述其元数据。
 /// </summary>

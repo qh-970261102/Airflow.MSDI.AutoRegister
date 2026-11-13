@@ -45,7 +45,11 @@ dotnet add package Airflow.MSDI.AutoRegister
 
 ### 2. 给服务加特性
 
+> 注册特性位于 **`Airflow.MSDI.AutoRegister`** 命名空间 —— 每个项目引入一次即可(`GlobalUsings.cs` 里写 `global using Airflow.MSDI.AutoRegister;`,或每个文件写普通 `using`)。下面的片段默认该命名空间已在作用域内。
+
 ```csharp
+using Airflow.MSDI.AutoRegister;
+
 [SingletonService]
 class ServiceA { }
 
@@ -94,6 +98,8 @@ class ServiceH
 ### 3. 声明注册入口
 
 ```csharp
+using Airflow.MSDI.AutoRegister;
+
 internal static partial class Register
 {
     [AutoRegister]
@@ -303,6 +309,8 @@ var item = items.FindByKey("primary");
 继承 `BaseServiceAttribute` 即可。用 `[RegistrationOptions]` 描述构造函数布局,生成器据此读取生命周期、服务类型与 Order:
 
 ```csharp
+using Airflow.MSDI.AutoRegister;
+
 [RegistrationOptions(
     LifetimeIndex = -1,                        // 没有生命周期构造参数 → 用 DefaultLifetime
     ServiceTypeIndex = 0,                      // 构造参数 #0 是服务类型
@@ -449,6 +457,7 @@ new RegisterItemInfo<IView>(__keyValue1, typeof(MainView), ServiceLifetime.Trans
 - 生成的代码需要 **C# 9+**;**泛型特性语法需要 C# 11+**(旧 `typeof(...)` 写法 C# 9+ 即可)。
 - `[AutoRegister(Usings = ...)]` 只写 using 指令,不能添加程序集引用(仍需 `<Reference>` / `<ProjectReference>`)。
 - `KeyTemplate` 是 opt-in 的**运行时**求值(每次 `AddServices` 调用一次 helper,无反射)。因为 key 值编译期不可知,`AMAR2009` / `AMAR2005` 只校验显式字面量 key。
+- 所有特性类型(`SingletonService` / `ScopedService` / `TransientService` / `BaseServiceAttribute` / `[AutoRegister]` / `[RegistrationOptions]`)都位于 **`Airflow.MSDI.AutoRegister`** 命名空间。请在项目里加一行 `global using Airflow.MSDI.AutoRegister;`(或每个文件写普通 `using`)。2.1.1 之前它们在全局命名空间,因此老代码无 `using` 也能编译。
 
 ## 从 1.x 迁移
 
