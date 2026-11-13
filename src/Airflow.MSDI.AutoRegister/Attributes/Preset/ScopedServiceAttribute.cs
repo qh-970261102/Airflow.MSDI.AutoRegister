@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 
+namespace Airflow.MSDI.AutoRegister;
+
 [
     RegistrationOptions(
         LifetimeIndex = -1,

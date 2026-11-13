@@ -45,7 +45,11 @@ dotnet add package Airflow.MSDI.AutoRegister
 
 ### 2. Decorate your services
 
+> The registration attributes live in the **`Airflow.MSDI.AutoRegister`** namespace — add it once per project (`global using Airflow.MSDI.AutoRegister;` in a `GlobalUsings.cs`, or a plain `using` per file). Snippets below assume it is in scope.
+
 ```csharp
+using Airflow.MSDI.AutoRegister;
+
 [SingletonService]
 class ServiceA { }
 
@@ -94,6 +98,8 @@ class ServiceH
 ### 3. Generate the registrations
 
 ```csharp
+using Airflow.MSDI.AutoRegister;
+
 internal static partial class Register
 {
     [AutoRegister]
@@ -303,6 +309,8 @@ var item = items.FindByKey("primary");
 Any subclass of `BaseServiceAttribute` works. Describe your constructor layout with `[RegistrationOptions]` so the generator knows which argument is the lifetime, the service type, and the order:
 
 ```csharp
+using Airflow.MSDI.AutoRegister;
+
 [RegistrationOptions(
     LifetimeIndex = -1,                        // no lifetime ctor arg → use DefaultLifetime
     ServiceTypeIndex = 0,                      // ctor arg #0 is the service type
@@ -449,6 +457,7 @@ The generator reports `AMAR`-prefixed diagnostics — **errors block compilation
 - Generated code needs **C# 9+**; the **generic attribute syntax needs C# 11+** (legacy `typeof(...)` form works on C# 9+).
 - `[AutoRegister(Usings = ...)]` only writes using directives; it cannot add assembly references (use `<Reference>` / `<ProjectReference>`).
 - `KeyTemplate` is opt-in and evaluated at **runtime** during `AddServices` (one helper call per registration, no reflection). Because the key value is not known at compile time, `AMAR2009` / `AMAR2005` only validate explicit literal keys.
+- Every attribute type (`SingletonService` / `ScopedService` / `TransientService` / `BaseServiceAttribute` / `[AutoRegister]` / `[RegistrationOptions]`) lives in the **`Airflow.MSDI.AutoRegister`** namespace. Add `global using Airflow.MSDI.AutoRegister;` once per project (or a `using` per file). Before 2.1.1 these types sat in the global namespace, which is why older code compiled without any `using`.
 
 ## Migrating from 1.x
 

@@ -1,7 +1,7 @@
 # AI / LLM Quick Start
 
 > **Purpose**: a compact, machine-friendly reference for AI coding assistants (Cursor, Copilot, ChatGPT, Claude, …) and humans who want a 2-minute refresher.
-> Package: **Airflow.MSDI.AutoRegister 2.0** · Target: Microsoft.Extensions.DependencyInjection 8.0+ · Requires C# 11 for generic attributes.
+> Package: **Airflow.MSDI.AutoRegister 2.1** · Target: Microsoft.Extensions.DependencyInjection 8.0+ · Requires C# 11 for generic attributes.
 > 中文用户:概念与示例同样适用,详见 [README.zh-CN.md](./README.zh-CN.md)。
 
 ## How to use this file
@@ -11,6 +11,8 @@ Paste this whole file (or the "Prompt template" section at the end) into your AI
 ## What the library does
 
 A Roslyn **source generator**. You decorate classes/methods with attributes and mark one `partial` method with `[AutoRegister]`; at compile time the generator writes the body of that method with plain `services.Add…` calls (no reflection). It also generates, for every service type, a registration-metadata list and an aggregate `IEnumerable<T>` that includes keyed + non-keyed implementations.
+
+All attribute types live in the **`Airflow.MSDI.AutoRegister`** namespace: add `global using Airflow.MSDI.AutoRegister;` (e.g. in `GlobalUsings.cs`) or a `using` per file, otherwise `[SingletonService]` is unresolved.
 
 ## Golden rules
 
@@ -28,6 +30,7 @@ A Roslyn **source generator**. You decorate classes/methods with attributes and 
 ## Minimal template (copy-paste)
 
 ```csharp
+using Airflow.MSDI.AutoRegister;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace MyApp;
@@ -211,6 +214,7 @@ Generated code uses `string __keyValue1 = GetViewRegisterKey(typeof(global::Demo
 9. **Singleton factory with `IServiceProvider` parameter** — `AMAR1010`; move the dependency to the owning class constructor.
 10. **Assuming keyed services work on .NET 6/7** — keyed resolution requires MSDI 8.0+ (.NET 8+).
 11. **Expecting `AddSingleton<I, T>()` / `AddSingleton<T>()` lines** — v2 always emits one `object` anchor per implementation+lifetime plus aliases; that is expected, not a bug.
+12. **Omitting `using Airflow.MSDI.AutoRegister;`** — the attributes are namespaced (since 2.1.1); without it `[SingletonService]` / `[AutoRegister]` / `[RegistrationOptions]` are all unresolved (`CS0246`).
 
 ## Prompt template
 
