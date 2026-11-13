@@ -33,9 +33,14 @@ internal static class GeneratorTestHelper
     public static (string GeneratedCode, Compilation OutputCompilation, ImmutableArray<Diagnostic> GeneratorDiagnostics) RunGenerator(string source)
     {
         var tree = CSharpSyntaxTree.ParseText(source);
+        // 特性类型位于 Airflow.MSDI.AutoRegister 命名空间。测试片段统一由这里注入一条 global using,
+        // 相当于消费方在 GlobalUsings.cs 里写的那一行,片段本身不必重复 using。
+        var globalUsings = CSharpSyntaxTree.ParseText(
+            "global using Airflow.MSDI.AutoRegister;",
+            path: "TestGlobalUsings.cs");
         var compilation = CSharpCompilation.Create(
             "GeneratorTestAssembly",
-            new[] { tree },
+            new[] { globalUsings, tree },
             References,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
 

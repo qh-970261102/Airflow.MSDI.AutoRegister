@@ -20,9 +20,9 @@ namespace Airflow.MSDI.AutoRegister.Generator;
 [Generator(LanguageNames.CSharp)]
 public sealed class AutoRegisterGenerator : IIncrementalGenerator
 {
-    private const string BaseServiceAttributeMetadataName = "BaseServiceAttribute";
-    private const string AutoRegisterAttributeMetadataName = "AutoRegisterAttribute";
-    private const string RegistrationOptionsAttributeMetadataName = "RegistrationOptionsAttribute";
+    private const string BaseServiceAttributeMetadataName = "Airflow.MSDI.AutoRegister.BaseServiceAttribute";
+    private const string AutoRegisterAttributeMetadataName = "Airflow.MSDI.AutoRegister.AutoRegisterAttribute";
+    private const string RegistrationOptionsAttributeMetadataName = "Airflow.MSDI.AutoRegister.RegistrationOptionsAttribute";
     private const string IServiceProviderMetadataName = "System.IServiceProvider";
     private const string IServiceCollectionMetadataName = "Microsoft.Extensions.DependencyInjection.IServiceCollection";
     private const string ServiceLifetimeMetadataName = "Microsoft.Extensions.DependencyInjection.ServiceLifetime";
